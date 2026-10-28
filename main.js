@@ -202,7 +202,8 @@ const content = setupContentIpc({ electron, settings, tasks, logger, dataDir: DA
 // 平台号（多号登录）/ 打开草稿箱 / 自动存草稿
 publisher = createPublisher({ electron, logger, settings, tasks, store: content.store, broadcast, dataDir: DATA_DIR, iconPath: APP_ICON, imageFile: (name) => content.images.fileOf(name) });
 // 找爆款（后台窗口搜索 / 读正文 / 今日热点）+ 对标拆解 + 定时自动创作
-const discover = createDiscover({ electron, logger, store: content.store, fetchImpl: timedFetch, iconPath: APP_ICON });
+const discover = createDiscover({ electron, logger, store: content.store, fetchImpl: timedFetch, iconPath: APP_ICON,
+  avoid: () => ({ on: settings.get("avoidSensitive") !== false, intl: !!settings.get("avoidIntl"), words: settings.get("avoidWords") || "" }) });
 const automation = createAutomation({ tasks, store: content.store, settings, logger, discover, content, publisher, broadcast });
 {
   const dh = (ch, fn) => ipcMain.handle(ch, async (_e, ...args) => {

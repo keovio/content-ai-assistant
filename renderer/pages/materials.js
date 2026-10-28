@@ -105,11 +105,41 @@
           h("div", { class: "editor-bar" },
             ...(m.tags || []).map((t) => h("span", { class: "chip static" }, "#" + t)), h("span", { class: "spacer" }),
             m.kind === "image" ? null : h("button", { class: "btn small ghost", onclick: () => C.copy(m.content || m.url, "素材") }, "复制"),
-            h("button", { class: "btn small ghost", onclick: () => reset(m) }, "编辑"),
+            h("button", { class: "btn small ghost", onclick: () => (m.kind === "image" ? editImage(m) : edit(m)) }, "编辑"),
             h("button", { class: "btn small danger-ghost", onclick: async () => {
               if (!(await window.Shell.confirm("删除这条素材？", { okText: "删除", danger: true }))) return;
               try { await C.remove("materials", m.id); } catch (e) { C.err(e); }
             } }, "删除")));
+      }
+      // 文字素材：填进上面的表单，并滚过去（之前点了没反应是因为表单在页面顶部看不到）
+      function edit(m) {
+        reset(m);
+        document.getElementById("material-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+      // 图片素材：弹窗编辑说明、描述和标签，能看到大图
+      function editImage(m) {
+        const img = h("img", { class: "img-edit-preview", alt: m.title || "" });
+        C.call(window.app.images.dataUrl(m.image)).then((u) => { if (u) img.src = u; }).catch(() => {});
+        const tIn = h("input", { class: "input", value: m.title || "", placeholder: "图片说明（配图时按它匹配，如：街角咖啡店门口）" });
+        const cIn = h("textarea", { class: "input", rows: 3, placeholder: "补充描述（可选）" });
+        cIn.value = m.content || "";
+        const gIn = h("input", { class: "input", value: (m.tags || []).join(" "), placeholder: "标签，用空格或逗号分隔" });
+        const close = () => { overlay.remove(); document.removeEventListener("keydown", onKey); };
+        const onKey = (e) => { if (e.key === "Escape") close(); };
+        const saveImg = async () => {
+          try {
+            await C.save("materials", { id: m.id, kind: "image", image: m.image, title: tIn.value.trim(), content: cIn.value.trim(), url: m.url || "", tags: gIn.value });
+            window.Shell.toast("已更新", "success"); close(); refresh();
+          } catch (e) { C.err(e); }
+        };
+        const overlay = h("div", { class: "modal-overlay", onclick: (e) => { if (e.target === overlay) close(); } },
+          h("div", { class: "modal img-edit-modal", "data-material": m.id },
+            h("h3", { class: "img-edit-title" }, "编辑图片素材"), img,
+            h("div", { class: "form" }, C.field("说明", tIn), C.field("描述", cIn), C.field("标签", gIn),
+              h("div", { class: "actions" }, h("button", { class: "btn primary", onclick: saveImg }, "保存修改"), h("button", { class: "btn", onclick: close }, "取消")))));
+        document.addEventListener("keydown", onKey);
+        document.body.append(overlay);
+        tIn.focus();
       }
       function thumb(m) {
         const img = h("img", { class: "mat-thumb", alt: m.title || "" });

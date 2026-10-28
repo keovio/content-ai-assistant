@@ -815,3 +815,8 @@ button.stat:hover { border-color: var(--primary); }
 .job-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .job-field .input { width: 100%; box-sizing: border-box; }
 .job-label { font-size: 13px; font-weight: 500; }
+
+/* 0.5.2 图片素材编辑弹窗 */
+.img-edit-modal { width: min(560px, calc(100vw - 40px)); max-height: 88vh; overflow: auto; display: flex; flex-direction: column; gap: 12px; }
+.img-edit-title { margin: 0; font-size: 15px; }
+.img-edit-preview { width: 100%; max-height: 300px; object-fit: contain; border-radius: 8px; background: var(--line); }

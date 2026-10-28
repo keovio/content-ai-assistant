@@ -248,6 +248,9 @@
       box.append(
         h("p", { class: "card-desc" }, "到点自动：找爆款 → 跳过拆过的 → 拆解 → 写原创 → 推草稿箱。可以建多个任务，每个任务单独设时间、关键词、来源和目标平台；同一时间到点的会依次跑。只存草稿不发布；与原文重合度超过上限的不推送，并标记「需改写」。应用需要开着才会运行（电脑睡眠错过的时段，醒来 15 分钟内会补跑）。"),
         listBox, h("div", { class: "actions" }, addBtn),
+        row("避开时政新闻", "找爆款和挑今日热点时跳过国内时政（政策会议、官员反腐、涉台涉港）、灾难事故、刑事案件、讣告这类个人不好写的（手动找爆款也一样）", window.Shell.settingsUI.toggle("avoidSensitive")),
+        row("也避开国际 / 军事", "默认可以写国际和军事话题；打开后这类也跳过", window.Shell.settingsUI.toggle("avoidIntl")),
+        row("自定义屏蔽词", "标题含这些词的爆款和热点都跳过，用空格或逗号分隔", textInput("avoidWords", { placeholder: "例如：股市 彩票 明星离婚" }), { stack: true }),
         row("重合度上限", "所有任务共用：与原文重合度超过这个值就不推送、标记「需改写」（手动创作也按这个提醒）", range("overlapLimit", { min: 5, max: 90, step: 1, format: (v) => v + "%" })),
         row("最近运行", historyBox, null, { stack: true }));
 

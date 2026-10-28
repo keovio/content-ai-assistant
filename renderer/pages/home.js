@@ -66,7 +66,8 @@
         hotBox.replaceChildren(...(list.length ? [h("ol", { class: "hot-list" }, ...list.map((x, i) => h("li", {},
           h("span", { class: "hot-rank" + (i < 3 ? " top" : "") }, String(i + 1)),
           h("button", { class: "link-btn hot-title", title: "去找这个话题的爆款", onclick: go("benchmark", { tab: "find", keyword: x.title, search: true }) }, x.title),
-          x.hot ? h("span", { class: "muted small-text" }, C.fmtCount(x.hot)) : null)))]
+          x.hot ? h("span", { class: "muted small-text" }, C.fmtCount(x.hot)) : null))),
+          hotData.skipped ? h("p", { class: "muted small-text hot-skipped" }, `已跳过 ${hotData.skipped} 条时政新闻（设置 → 定时自动创作 可关）`) : null]
           : [h("p", { class: "muted small-text" }, (hotData.errors || []).join("；") || "暂时没取到热点")]));
       }
 

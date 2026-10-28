@@ -31,12 +31,12 @@ test("搜索地址：关键词编码、时间范围、翻页", () => {
 
 test("今日热点解析：头条热榜", () => {
   const list = S.parseToutiaoHot({ data: [
-    { Title: "中方重视姆巴佩作出的道歉", Url: "https://www.toutiao.com/trending/7701614631789284918/?category_name=x", HotValue: "102199531" },
+    { Title: "中方重视姆巴佩作出的道歉", Url: "https://www.toutiao.com/trending/7701614631789284918/?category_name=x", HotValue: "102199531", InterestCategory: ["sports"] },
     { Title: "", Url: "x" }, { Title: "第二条", Url: "javascript:1" },
   ] });
   assert.deepEqual(list, [
-    { title: "中方重视姆巴佩作出的道歉", url: "https://www.toutiao.com/trending/7701614631789284918/", hot: 102199531 },
-    { title: "第二条", url: "", hot: 0 },
+    { title: "中方重视姆巴佩作出的道歉", url: "https://www.toutiao.com/trending/7701614631789284918/", hot: 102199531, category: "sports" },
+    { title: "第二条", url: "", hot: 0, category: "" },
   ]);
   assert.deepEqual(S.parseToutiaoHot(null), []);
 });

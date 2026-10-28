@@ -123,3 +123,30 @@ test("没填关键词：今日热点交替取头条和百度，重复话题只�
   assert.deepEqual(U.pickHotTopics(hot, 1), ["华为发布会"]);
   assert.deepEqual(U.pickHotTopics({}, 3), []);
 });
+
+test("avoidReason：跳过时政、灾难、刑案，留下能写的", () => {
+  assert.ok(U.avoidReason("国务院原副总理刘延东逝世"));
+  assert.ok(U.avoidReason("西班牙高铁列车追尾至少50死"));
+  assert.ok(U.avoidReason("男子多次触摸女同事隐私部位被拘捕"));
+  assert.equal(U.avoidReason("美日长蛇阵七寸在石垣岛", { category: "military" }), "", "国际 / 军事默认能写");
+  assert.equal(U.avoidReason("乌克兰战时状态再延90天意味着什么", { category: "international", hot: true }), "");
+  assert.ok(U.avoidReason("美日长蛇阵七寸在石垣岛", { category: "military", intl: true }));
+  assert.ok(U.avoidReason("乌克兰战时状态再延90天", { hot: true, intl: true }));
+  assert.ok(U.avoidReason("邱毅：台检方无法无天", { category: "taiwan" }));
+  assert.equal(U.avoidReason("女子被蜱虫咬伤后确诊森林脑炎"), "");
+  assert.equal(U.avoidReason("食用油的保质期是指未开封状态"), "");
+  assert.equal(U.avoidReason("身家1270亿周群飞成中国女首富", { category: "finance" }), "");
+  assert.equal(U.avoidReason("日本旅游攻略：京都 5 天怎么玩"), "", "搜索结果里提到国家不误伤");
+  assert.equal(U.avoidReason("日本首相换人", { hot: true }), "");
+  assert.ok(U.avoidReason("日本首相换人", { hot: true, intl: true }));
+  assert.ok(U.avoidReason("彩票中奖 5 亿", { words: "彩票 股市" }).includes("彩票"));
+  assert.equal(U.avoidReason("国务院发布新规", { on: false }), "", "关掉内置过滤");
+  assert.ok(U.avoidReason("彩票中奖", { on: false, words: "彩票" }), "关掉后自定义词仍生效");
+});
+
+test("pickHotTopics 跳过时政热点", () => {
+  const hot = { toutiao: [{ title: "国务院原副总理逝世" }, { title: "刘某被查", category: "" }, { title: "秋天养生喝什么汤", category: "health" }],
+    baidu: [{ title: "台风登陆致3人遇难" }, { title: "年轻人开始流行早睡" }] };
+  assert.deepEqual(U.pickHotTopics(hot, 3, { on: true }), ["年轻人开始流行早睡", "秋天养生喝什么汤"]);
+  assert.equal(U.pickHotTopics(hot, 5).length, 5);
+});

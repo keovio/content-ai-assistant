@@ -146,6 +146,16 @@ async function run(win) {
     await nav("materials");
     await sleep(1200);
     await shot("素材库-图片");
+    // 0.5.2：图片素材能编辑
+    R.imgEdit = await js(`const btn = [...document.querySelectorAll("#page-materials .item-list button")].find((b) => b.textContent === "编辑" && b.closest(".material")?.querySelector("img"));
+      if (!btn) return { error: "no image edit button" };
+      btn.click(); await new Promise((r) => setTimeout(r, 400));
+      const modal = document.querySelector(".img-edit-modal"); if (!modal) return { error: "no modal" };
+      const id = modal.dataset.material; const inp = modal.querySelector("input.input"); inp.value = "改过的图片说明"; inp.dispatchEvent(new Event("input"));
+      [...modal.querySelectorAll("button")].find((b) => b.textContent === "保存修改").click();
+      await new Promise((r) => setTimeout(r, 800));
+      const m = (await window.app.store.list("materials")).find((x) => x.id === id);
+      return { ok: !!m && m.title === "改过的图片说明" && m.kind === "image" && !!m.image, modalClosed: !document.querySelector(".img-edit-modal") };`);
     R.materials = await js(`const l = await window.app.store.list("materials"); return { images: l.filter((m) => m.kind === "image").length, total: l.length };`);
   }
 
