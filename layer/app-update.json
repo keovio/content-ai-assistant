@@ -1,0 +1,19 @@
+{
+  "version": "0.5.4",
+  "electron": "33.4.11",
+  "bootstrap": 1,
+  "sha256": "94835557bca6e822d9b625e84f514e71fcf4dbeddb1431ebc8d59cb12bf1eaa9",
+  "size": 822217,
+  "asarUrl": "https://github.com/keovio/content-ai-assistant/releases/download/v0.5.4/app-update.asar",
+  "installers": {
+    "mac": {
+      "arm64": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-mac-arm64.dmg",
+      "x64": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-mac-x64.dmg"
+    },
+    "win": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-win-x64.exe",
+    "linux": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-linux-x64.AppImage"
+  },
+  "releaseUrl": "https://github.com/keovio/content-ai-assistant/releases/tag/v0.5.4",
+  "notes": "工作台新增「账号数据」：自动读出各平台号的粉丝、阅读、收益（启动后读一次，超过 12 小时自动重读，也可手动刷新），读取失败的号会标出来；工作台改成固定三列布局，去掉了「当前运营账号」「平台账号」两张卡片；设置左侧导航图标去重，「字体」补上图标",
+  "publishedAt": "2026-10-28T12:19:49.746Z"
+}
