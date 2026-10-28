@@ -1,0 +1,19 @@
+{
+  "version": "0.5.3",
+  "electron": "33.4.11",
+  "bootstrap": 1,
+  "sha256": "fb255d08c442ad596a5a8002a5ab6da1bf7880783da3f7006b0b90e668b603c0",
+  "size": 801615,
+  "asarUrl": "https://github.com/keovio/content-ai-assistant/releases/download/v0.5.3/app-update.asar",
+  "installers": {
+    "mac": {
+      "arm64": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-mac-arm64.dmg",
+      "x64": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-mac-x64.dmg"
+    },
+    "win": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-win-x64.exe",
+    "linux": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-linux-x64.AppImage"
+  },
+  "releaseUrl": "https://github.com/keovio/content-ai-assistant/releases/tag/v0.5.3",
+  "notes": "新增违规检测：创作页实时提示广告法极限词、医疗功效、站外引流、时政敏感等风险用词，可一键 AI 合规改写；高风险稿子标记「需改写」，定时和批量创作不会推送",
+  "publishedAt": "2026-10-28T11:54:07.389Z"
+}
