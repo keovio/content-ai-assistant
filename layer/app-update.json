@@ -1,0 +1,19 @@
+{
+  "version": "0.5.8",
+  "electron": "33.4.11",
+  "bootstrap": 1,
+  "sha256": "302fcd405483aa107ec488a387844a1c42b81ed4bd1db8cc022d379075e636aa",
+  "size": 855469,
+  "asarUrl": "https://github.com/keovio/content-ai-assistant/releases/download/v0.5.8/app-update.asar",
+  "installers": {
+    "mac": {
+      "arm64": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-mac-arm64.dmg",
+      "x64": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-mac-x64.dmg"
+    },
+    "win": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-win-x64.exe",
+    "linux": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-linux-x64.AppImage"
+  },
+  "releaseUrl": "https://github.com/keovio/content-ai-assistant/releases/tag/v0.5.8",
+  "notes": "批量操作能看到进度：对标拆解「拆解并创作 / 只拆解」时每一篇旁边显示排队中、拆解中、写稿中、配图中、推草稿箱中、已写好、需改写、失败等状态，顶部有进度条和停止按钮，做完的留在列表里显示结果；选题批量收藏 / 后台写 / 加入日历 / 删除时，每张卡片也显示自己的状态和总进度",
+  "publishedAt": "2026-10-28T13:32:45.061Z"
+}
