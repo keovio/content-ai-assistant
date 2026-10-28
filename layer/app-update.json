@@ -1,0 +1,19 @@
+{
+  "version": "0.5.9",
+  "electron": "33.4.11",
+  "bootstrap": 1,
+  "sha256": "cbee3b82b010b16c59f5a950ef217da4110f6c792161c2e6727b07fab02cbdb0",
+  "size": 856583,
+  "asarUrl": "https://github.com/keovio/content-ai-assistant/releases/download/v0.5.9/app-update.asar",
+  "installers": {
+    "mac": {
+      "arm64": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-mac-arm64.dmg",
+      "x64": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-mac-x64.dmg"
+    },
+    "win": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-win-x64.exe",
+    "linux": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-linux-x64.AppImage"
+  },
+  "releaseUrl": "https://github.com/keovio/content-ai-assistant/releases/tag/v0.5.9",
+  "notes": "AI 写稿改成打字机效果：正文一个字一个字地出来，AI 返回快时自动加速跟上，写完直接显示完整结果",
+  "publishedAt": "2026-10-28T13:39:14.339Z"
+}
