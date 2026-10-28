@@ -131,7 +131,7 @@ const server = http.createServer((req, res) => {
       <button id="save">存草稿</button><span id="tip"></span>
       <script>
         // 模拟平台编辑器：粘贴图片时自己「上传」并插入 <img>
-        document.querySelector(".ProseMirror").addEventListener("paste",(e)=>{const f=[...(e.clipboardData&&e.clipboardData.files||[])];if(f.length){e.preventDefault();for(const x of f){const img=document.createElement("img");img.dataset.pasted="1";img.alt=x.type;document.querySelector(".ProseMirror").appendChild(img);}}});
+        document.querySelector(".ProseMirror").addEventListener("paste",(e)=>{const f=[...(e.clipboardData&&e.clipboardData.files||[])];if(f.length){e.preventDefault();for(const x of f){const img=document.createElement("img");img.dataset.pasted="1";img.alt=x.type;const s=getSelection();if(s.rangeCount&&document.querySelector(".ProseMirror").contains(s.anchorNode)){const r=s.getRangeAt(0);r.deleteContents();r.insertNode(img);r.setStartAfter(img);r.collapse(true);}else document.querySelector(".ProseMirror").appendChild(img);}}});
         document.getElementById("save").onclick=async()=>{const t=document.querySelector("textarea").value,b=document.querySelector(".ProseMirror").innerText,imgs=document.querySelectorAll(".ProseMirror img").length;
         await fetch("/mp/save",{method:"POST",body:JSON.stringify({title:t,body:b,imgs})});document.getElementById("tip").textContent="已保存";};</script>`, "发文"));
   }
@@ -174,7 +174,7 @@ server.listen(0, "127.0.0.1", async () => {
   result.imageCalls = imageCalls;
   result.aiCalls = aiCalls.length;
   fs.writeFileSync(path.join(OUT, "result.json"), JSON.stringify(result, null, 2));
-  const ok = run.code === 0 && /E2E OK/.test(run.out) && drafts.length >= 1 && drafts.some((d) => d.title && d.imgs >= 1) && imageCalls >= 1;
+  const ok = run.code === 0 && /E2E OK/.test(run.out) && drafts.length >= 1 && drafts.some((d) => d.title && d.imgs >= 1) && !drafts.some((d) => /CAIIMG/.test(d.body || "")) && imageCalls >= 1;
   console.log((ok ? "E2E OK " : "E2E FAIL ") + JSON.stringify(result));
   console.log("截图：" + OUT);
   server.close();
