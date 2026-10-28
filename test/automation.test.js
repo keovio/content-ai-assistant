@@ -156,3 +156,25 @@ test("定时任务：同一时间到点的两个任务依次各跑一次，不�
   const names = store.autoRuns.list().map((r) => r.jobName).sort();
   assert.deepEqual(names, ["乙", "甲"]);
 });
+
+test("拆解链接时把原文图片一起下载存下来，仿写配图可以直接用", async () => {
+  const dir = tmp();
+  const store = createStore(path.join(dir, "data"));
+  const settings = createSettings({ file: path.join(dir, "settings.json"), schema: { ...AUTO_SCHEMA, currentAccount: { type: "string", default: "acc1" } } });
+  const logger = { scope: () => ({ info() {}, warn() {}, debug() {}, error() {} }) };
+  const dl = [];
+  const discover = {
+    read: async (url) => ({ url, canonicalUrl: url, title: "小区绿化带惊现红火蚁巢", body: SOURCE_A, platform: "toutiao", partition: "persist:discover", pageUrl: url,
+      images: [{ src: "https://img/a.jpg", alt: "现场", after: "起因" }, { src: "https://img/b.jpg", alt: "", after: "" }], cover: "https://img/c.jpg" }),
+    downloadImages: async (list, opt) => { dl.push(opt.referer); return list.map((x) => ({ ...x, buf: Buffer.from("x") })); },
+  };
+  const content = {
+    ai: { chat: async () => ({ text: "```json\n" + ANALYSIS + "\n```" }) }, brand: () => ({}), rules: () => ({}), currentAccount: () => "acc1", secrets: { get: () => "sk" },
+    importImages: (got, { cover }) => ({ images: got.map((x, i) => ({ name: `src-${i}.jpg`, alt: x.alt, after: x.after })), cover: cover ? "src-cover.jpg" : "" }),
+  };
+  const auto = createAutomation({ tasks: createTaskManager(), store, settings, logger, discover, content, publisher: {}, broadcast() {} });
+  const r = await auto.breakdownOne({ url: "https://www.toutiao.com/article/99/" }, ctx());
+  assert.deepEqual(r.breakdown.images.map((x) => x.name), ["src-0.jpg", "src-1.jpg"]);
+  assert.equal(r.breakdown.cover, "src-cover.jpg");
+  assert.equal(dl[0], "https://www.toutiao.com/article/99/");
+});
