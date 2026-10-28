@@ -25,16 +25,41 @@
   const waiters = new Map(); // taskId → { onText, resolve, reject, onTask }
   const FINAL = new Set(["done", "failed", "cancelled"]);
   let wired = false;
+  // 打字机效果：AI 是一小段一小段返回的，这里把新到的文字一个字一个字地显示出来；
+  // 落后太多时自动加速（最多落后约半秒），任务结束时由调用方直接放上完整结果
+  function typewriter(cb) {
+    let target = "", shown = 0, raf = 0, stopped = false;
+    const frame = () => {
+      raf = 0;
+      if (stopped) return;
+      const lag = target.length - shown;
+      if (lag <= 0) return;
+      shown += Math.max(1, Math.ceil(lag / 30));
+      cb(target.slice(0, shown));
+      if (shown < target.length) raf = requestAnimationFrame(frame);
+    };
+    return {
+      push(text) {
+        if (stopped) return;
+        text = String(text || "");
+        if (!text.startsWith(target.slice(0, shown))) shown = 0; // 内容被替换（重试等）就从头显示
+        target = text;
+        if (!raf) raf = requestAnimationFrame(frame);
+      },
+      stop() { stopped = true; if (raf) cancelAnimationFrame(raf); raf = 0; },
+    };
+  }
   function wire() {
     if (wired) return;
     wired = true;
-    api.ai.onDelta(({ taskId, text }) => { const w = waiters.get(taskId); if (w && w.onText) w.onText(text); });
+    api.ai.onDelta(({ taskId, text }) => { const w = waiters.get(taskId); if (w && w.tw) w.tw.push(text); });
     api.tasks.onChange((t) => {
       const w = waiters.get(t.id);
       if (!w) return;
       if (w.onTask) w.onTask(t);
       if (!FINAL.has(t.status)) return;
       waiters.delete(t.id);
+      if (w.tw) w.tw.stop();
       if (t.status === "done") w.resolve(t.result);
       else if (t.status === "cancelled") w.resolve(null);
       else w.reject(new Error(t.error || "AI 任务失败"));
@@ -46,13 +71,15 @@
     if (!r || !r.ok) throw new Error((r && r.error) || "任务启动失败");
     const t = r.task;
     return new Promise((resolve, reject) => {
-      waiters.set(t.id, { onText, onTask, resolve, reject });
+      const tw = onText ? typewriter(onText) : null;
+      waiters.set(t.id, { onText, tw, onTask, resolve, reject });
       if (onTask) onTask(t);
       // 万一任务在注册监听前就结束了
       api.tasks.list().then((list) => {
         const now = list.find((x) => x.id === t.id);
         if (now && FINAL.has(now.status) && waiters.has(t.id)) {
           waiters.delete(t.id);
+          if (tw) tw.stop();
           if (now.status === "done") resolve(now.result); else if (now.status === "cancelled") resolve(null); else reject(new Error(now.error || "AI 任务失败"));
         }
       }).catch(() => {});
