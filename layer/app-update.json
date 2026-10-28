@@ -1,0 +1,19 @@
+{
+  "version": "0.5.1",
+  "electron": "33.4.11",
+  "bootstrap": 1,
+  "sha256": "55fd1b99cae8603b9391e0630d5e6bb82ae212d5e7c9249cbc60f769b255d0e6",
+  "size": 784754,
+  "asarUrl": "https://github.com/keovio/content-ai-assistant/releases/download/v0.5.1/app-update.asar",
+  "installers": {
+    "mac": {
+      "arm64": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-mac-arm64.dmg",
+      "x64": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-mac-x64.dmg"
+    },
+    "win": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-win-x64.exe",
+    "linux": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-linux-x64.AppImage"
+  },
+  "releaseUrl": "https://github.com/keovio/content-ai-assistant/releases/tag/v0.5.1",
+  "notes": "设置改成左侧分类导航，一次只显示一类，不用再从头滚到尾；定时任务卡片可折叠（收起时一行显示开关、下次运行和摘要）；修复定时任务启用开关点了弹回、配图服务商下拉框溢出卡片",
+  "publishedAt": "2026-10-28T11:37:27.097Z"
+}
