@@ -1,0 +1,19 @@
+{
+  "version": "0.6.6",
+  "electron": "33.4.11",
+  "bootstrap": 1,
+  "sha256": "a35cafd0480ed4158e009b525339adf7de8724585f6c0b0b17db7125422b919b",
+  "size": 893526,
+  "asarUrl": "https://github.com/keovio/content-ai-assistant/releases/download/v0.6.6/app-update.asar",
+  "installers": {
+    "mac": {
+      "arm64": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-mac-arm64.dmg",
+      "x64": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-mac-x64.dmg"
+    },
+    "win": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-win-x64.exe",
+    "linux": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-linux-x64.AppImage"
+  },
+  "releaseUrl": "https://github.com/keovio/content-ai-assistant/releases/tag/v0.6.6",
+  "notes": "批量拆解 / 拆解并创作拆成每篇一个任务：任务中心里一条一条显示，每行都能单独「取消」，顶部「全部停止」；找爆款新增「同一件事只留一篇」（默认开），同一事件的多篇只留热度最高的，跟拆过 / 写过的同一件事也不再显示；修复头条等原文图片下载失败（ERR_BLOCKED_BY_CLIENT）；生成过的文章和标题不再重复生成：AI 选题、取标题、写稿、自动创作都会避开已经写过的，标题撞了会自动换一个，找爆款也会隐藏跟写过的文章标题撞了的；发布页稿件列表和素材库支持全选、批量删除；找爆款新增「最多几条」选项（10 / 20 / 40 / 80）和「排除官方号」开关（按作者名排除央媒、地方媒体、政务号、品牌官方号）；拆解对标文章时下载原文图片，仿写配图原图优先，不够再 AI 生成；新增「AI 图带水印」开关；批量配图一次只生成一张，限流自动重试，可随时停止",
+  "publishedAt": "2026-10-28T15:05:25.491Z"
+}
