@@ -1,0 +1,19 @@
+{
+  "version": "0.4.1",
+  "electron": "33.4.11",
+  "bootstrap": 1,
+  "sha256": "798bd8d4a81cd80145f36fbd42d7c204d16a1e2a8327c13880be85ef3e18767c",
+  "size": 695901,
+  "asarUrl": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.1/app-update.asar",
+  "installers": {
+    "mac": {
+      "arm64": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-mac-arm64.dmg",
+      "x64": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-mac-x64.dmg"
+    },
+    "win": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-win-x64.exe",
+    "linux": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-linux-x64.AppImage"
+  },
+  "releaseUrl": "https://github.com/keovio/content-ai-assistant/releases/tag/v0.4.1",
+  "notes": "对标拆解（找爆款 / 粘贴拆解 / 拆解库）、定时自动创作、同一平台多号登录、创作页显示重合度和平台版本、工作台改版",
+  "publishedAt": "2026-10-28T10:33:52.083Z"
+}
