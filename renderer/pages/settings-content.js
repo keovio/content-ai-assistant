@@ -310,9 +310,27 @@
           const wdText = !wd.length || wd.length === 7 ? "每天" : wd.join(",") === "1,2,3,4,5" ? "工作日" : wd.map((d) => (WD.find((x) => x[0] === d) || [, d])[1]).join("、");
           const src = (SRC.find((x) => x[0] === j.source) || [, j.source])[1].replace(/（.*）/, "");
           const tg = String(j.targets || "").split(",").filter(Boolean).map((x) => C.PLATFORM_NAMES[x] || x).join("、") || "未选平台";
-          summary.textContent = `${t.length ? t.join("、") : "未设时间"} · ${wdText} · ${j.keywords ? j.keywords.slice(0, 20) : "今日热点"} · ${src}找 ${j.count} 篇 → ${tg}${j.images ? " · 配图" : ""}${j.push ? " · 推草稿箱" : ""}`;
+          const accName = j.accountId ? ((C.getAccounts().find((a) => a.id === j.accountId) || {}).name || "已删除的账号") : "";
+          summary.textContent = `${accName ? accName + " · " : ""}${t.length ? t.join("、") : "未设时间"} · ${wdText} · ${j.keywords ? j.keywords.slice(0, 20) : "今日热点"} · ${src}找 ${j.count} 篇 → ${tg}${j.images ? " · 配图" : ""}${j.push ? " · 推草稿箱" : ""}`;
         };
         drawSummary();
+        // 推送用哪个平台号：每个选中的平台一个下拉
+        const pushAccBox = h("div", { class: "job-field job-push-acc" });
+        let paCache = null;
+        async function drawPushAcc() {
+          const tg = String(j.targets || "").split(",").filter(Boolean).filter((pf) => pf !== "douyin");
+          pushAccBox.hidden = !j.push || !tg.length;
+          if (pushAccBox.hidden) return;
+          if (!paCache) { try { paCache = await C.call(api.publish.accounts("")); } catch { paCache = []; } }
+          const cur = j.pushAccounts || {};
+          pushAccBox.replaceChildren(h("div", { class: "job-label" }, "推到哪个号"), ...tg.map((pf) => {
+            const list = paCache.filter((a) => a.platform === pf);
+            const el = h("select", { class: "input" }, h("option", { value: "" }, `${C.PLATFORM_NAMES[pf] || pf}：自动`),
+              ...list.map((a) => h("option", { value: a.id, selected: cur[pf] === a.id }, `${C.PLATFORM_NAMES[pf] || pf}：${a.name}${a.loggedIn ? "" : "（未登录）"}`)));
+            el.addEventListener("change", () => { set("pushAccounts", { ...(j.pushAccounts || {}), [pf]: el.value }, true); });
+            return el;
+          }));
+        }
         const field = (label, el, hint) => h("div", { class: "job-field" }, h("div", { class: "job-label" }, label, hint ? h("span", { class: "muted small-text" }, "　", hint) : null), el);
         const foldBtn = h("button", { class: "btn small ghost job-fold", title: "展开 / 收起", onclick: () => toggleOpen() }, isOpen() ? "收起" : "展开");
         const grid = h("div", { class: "job-grid", hidden: !isOpen() });
@@ -339,7 +357,11 @@
             field("每次几篇", sel("count", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => [n, n + " 篇"]), Number)),
             field("写成哪些平台", checks("targets", Object.entries(C.PLATFORM_NAMES)), "第一个按骨架写原创，其余在它基础上改写"),
             field("生成配图", sw("images"), "按 设置 → 配图 生成封面和文中配图"),
-            field("自动推草稿箱", sw("push"), "用绑定当前运营账号的平台号"));
+            field("用哪个运营账号写", sel("accountId", [["", "运行时的当前账号"], ...C.getAccounts().map((a) => [a.id, a.name || "未命名"])]), "决定写作定位、口吻和稿件归属"),
+            field("自动推草稿箱", sw("push", drawPushAcc), "不选号 = 用绑定该运营账号的平台号"),
+            pushAccBox);
+        drawPushAcc();
+        card.addEventListener("change", (e) => { if (e.target && e.target.type === "checkbox" && e.target.closest(".job-field")) drawPushAcc(); });
         return card;
       }
       function draw() {
