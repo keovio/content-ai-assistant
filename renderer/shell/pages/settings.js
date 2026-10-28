@@ -3,6 +3,7 @@
 // 外观（布局、深浅色、主题色、缩放）、背景（预设 / 自定义图片、遮罩、毛玻璃、性能模式）、字体、关于与更新（含系统信息）、日志与数据。
 // 加自己的设置分组（一张卡片）：
 //   Shell.registerSettingsSection({ id: "sync", title: "同步", order: 15, tag: "可选", render(box, ctx) { box.append(row(...)) } });
+// 设置页分两组：上面「业务设置」（应用自己注册的分组，默认都在这里），下面「通用设置」（外观、更新、日志等内置分组，group: "system"）。
 // 设置项要先在 main.js 的 schema 里声明，读写用 Shell.getSettings() / Shell.saveSettings({ key: value })。
 (function () {
   const { h, icon } = window.Shell;
@@ -248,6 +249,7 @@
       box.append(
         sub("日志"),
         row("日志级别", "「调试」会记录更多细节，排查问题时再打开", select("logLevel", [["debug", "调试"], ["info", "信息"], ["warn", "警告"], ["error", "错误"]])),
+        row("任务开始时展开日志", "有后台任务（AI 生成、推送草稿箱等）开始时，自动打开右侧运行日志面板", toggle("logAutoOpen")),
         row("日志面板字号", "右侧运行日志面板（Ctrl/⌘ + L）的文字大小，也可以在面板上按住 Ctrl/⌘ 滚动滚轮", range("logFontSize", { min: 10, max: 18, step: 1, format: (v) => v + " px" })),
         row("日志文件", "按天保存，保留 7 天", h("button", { class: "btn", onclick: () => api.logs.openDir() }, "打开文件夹")),
         sub("数据"),
@@ -269,11 +271,18 @@
     async render(root, ctx) {
       root.classList.add("page-wide");
       root.append(h("header", { class: "page-head" }, h("div", {}, h("h1", {}, "设置"), h("p", { class: "sub" }, "修改立即生效并自动保存"))));
-      const body = window.Shell.modules();
-      body.classList.add("settings");
-      root.append(body);
+      const groups = {
+        custom: { title: "业务设置", desc: "AI、运营账号、平台和推送", body: window.Shell.modules() },
+        system: { title: "通用设置", desc: "外观、更新、日志和数据", body: window.Shell.modules() },
+      };
+      for (const [id, g] of Object.entries(groups)) {
+        g.body.classList.add("settings");
+        g.head = h("div", { class: "set-group-title", id: `settings-group-${id}` }, h("h2", {}, g.title), h("span", { class: "muted small-text" }, g.desc));
+        root.append(g.head, g.body);
+      }
       const c = { ...ctx, system: await api.system.info() };
-      for (const sec of [...builtin, ...sections].sort((a, b) => (a.order ?? 50) - (b.order ?? 50))) {
+      for (const sec of [...builtin.map((b) => ({ group: "system", ...b })), ...sections].sort((a, b) => (a.order ?? 50) - (b.order ?? 50))) {
+        const body = (groups[sec.group] || groups.custom).body;
         const box = h("div", { class: "set-group-body" });
         const tagEl = h("span", { class: "card-tag" });
         const drawTag = () => { const t = typeof sec.tag === "function" ? sec.tag(window.Shell.getSettings()) : sec.tag; tagEl.textContent = t || ""; tagEl.hidden = !t; };
@@ -284,6 +293,7 @@
         try { await sec.render(box, c); } catch (err) { window.Shell.reportError(err); box.append(h("p", { class: "error" }, err.message)); }
         if (!box.childElementCount) document.getElementById(`settings-${sec.id}`)?.remove();
       }
+      for (const g of Object.values(groups)) if (!g.body.childElementCount) { g.head.remove(); g.body.remove(); }
     },
   });
 })();

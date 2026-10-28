@@ -26,7 +26,7 @@
       srcBody.addEventListener("input", () => { wc.textContent = `${C.countWords(srcBody.value)} 字`; });
 
       root.append(
-        h("header", { class: "page-head" }, h("div", {}, h("h1", {}, "一稿多发"), h("p", { class: "sub" }, "一篇内容，改写成公众号 / 小红书 / 抖音口播各自的样子"))),
+        h("header", { class: "page-head" }, h("div", {}, h("h1", {}, "一稿多发"), h("p", { class: "sub" }, "一篇内容，改写成公众号 / 小红书 / 抖音口播 / 头条号 / 百家号各自的样子，可直接推送到草稿箱"))),
         h("div", { class: "writer-grid" },
           card({ title: "原文", icon: "note" },
             h("div", { class: "form" },
@@ -35,7 +35,9 @@
               h("div", { class: "editor-bar" }, wc, h("span", { class: "spacer" }), ...checks),
               h("div", { class: "actions" }, goBtn, stopBtn))),
           results));
-      results.append(h("section", { class: "card module" }, h("p", { class: "muted" }, "勾选平台后点「开始改写」，每个平台的版本会出现在这里，可以分别复制或保存。")));
+      results.append(h("section", { class: "card module" }, h("p", { class: "muted" }, "勾选平台后点「开始改写」，每个平台的版本会出现在这里，可以分别复制、保存，或直接推送到平台草稿箱。")));
+      // 账号切换后清掉上一个账号的原文
+      C.onData((what) => { if (what === "account") { srcTitle.value = ""; srcBody.value = ""; sourceId = ""; srcBody.dispatchEvent(new Event("input")); } });
 
       pickSel.addEventListener("change", async () => {
         if (!pickSel.value) return;
@@ -67,15 +69,34 @@
         const { card } = window.Shell;
         const out = h("textarea", { class: "input editor small-editor", placeholder: "等待生成…" });
         const status = h("span", { class: "muted small-text" }, "排队中…");
+        let savedId = "";
+        const saveVersion = async (quiet) => {
+          const st = C.splitTitle(out.value);
+          if (!st.body.trim()) { window.Shell.toast("还没有生成内容", "info"); return null; }
+          const item = await C.save("contents", { id: savedId || undefined, title: st.title || srcTitle.value || "未命名", body: st.body, platform: pf, status: "draft", sourceId });
+          savedId = item.id;
+          if (!quiet) window.Shell.toast(`已保存${C.platformName(pf)}版本`, "success");
+          return item;
+        };
+        const pushTagBox = h("span", {});
         const actions = h("div", { class: "editor-bar" }, status, h("span", { class: "spacer" }),
           h("button", { class: "btn small", onclick: () => C.copy(out.value, C.platformName(pf) + "版本") }, "复制"),
           h("button", { class: "btn small", onclick: () => C.open("writer", { fresh: true, ...C.splitTitle(out.value), platform: pf, sourceId }) }, "去编辑"),
-          h("button", { class: "btn small primary", onclick: async () => {
-            const st = C.splitTitle(out.value);
-            if (!st.body.trim()) return;
-            try { await C.save("contents", { title: st.title || srcTitle.value || "未命名", body: st.body, platform: pf, status: "draft", sourceId }); window.Shell.toast(`已保存${C.platformName(pf)}版本`, "success"); }
-            catch (e) { C.err(e); }
-          } }, "保存"));
+          h("button", { class: "btn small", onclick: () => saveVersion(false).catch(C.err) }, "保存"),
+          pushTagBox,
+          h("button", { class: "btn small primary", title: "保存并推送到平台草稿箱（不会发布）", onclick: async (e) => {
+            const b = e.currentTarget;
+            try {
+              const item = await saveVersion(true);
+              if (!item) return;
+              b.disabled = true;
+              const r = await C.push(item.id, { title: `推送「${(item.title || "").slice(0, 16)}」到${C.platformName(pf)}` });
+              const c = await C.call(window.app.store.get("contents", item.id));
+              pushTagBox.replaceChildren(C.pushTag(c) || "");
+              if (r && r.status === "saved") window.Shell.toast(`已存入${C.platformName(pf)}草稿箱`, "success");
+            } catch (err) { C.err(err); try { const c = savedId && await C.call(window.app.store.get("contents", savedId)); if (c) pushTagBox.replaceChildren(C.pushTag(c) || ""); } catch { /* ignore */ } }
+            finally { b.disabled = false; }
+          } }, pf === "douyin" ? "保存并打开创作页" : "保存并推送草稿箱"));
         const el = card({ title: C.platformName(pf) + "版本", icon: "share" }, out, actions);
         goBtn.disabled = true; stopBtn.hidden = false;
         let myId = null;

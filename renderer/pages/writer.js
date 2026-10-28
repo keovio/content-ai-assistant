@@ -34,6 +34,9 @@
       const stSel = C.selectEl(C.statusOptions(false), "draft");
       const dateIn = h("input", { class: "input", type: "date" });
       const savedInfo = h("span", { class: "muted small-text" });
+      const pushInfo = h("span", { class: "push-info" });
+      const pushBtn = h("button", { class: "btn small", title: "保存后自动打开平台编辑页，填好标题正文并存入草稿箱（不会发布）", onclick: () => pushNow() }, "推送到草稿箱");
+      const draftsBtn = h("button", { class: "btn small ghost", hidden: true, onclick: () => current.id && C.call(api.publish.openFor(current.id)).catch(C.err) }, "打开草稿箱");
       const titleBox = h("div", { class: "title-suggest", hidden: true });
       let undoBody = null;
       const undoBtn = h("button", { class: "btn small ghost", hidden: true, onclick: () => {
@@ -72,6 +75,7 @@
               wc, h("span", { class: "spacer" }),
               h("button", { class: "btn small", onclick: suggestTitles }, "AI 取标题"),
               undoBtn, polishSel, h("button", { class: "btn small", title: "选中一段只处理选中的，不选就处理全文", onclick: polish }, "处理")),
+            h("div", { class: "editor-bar push-bar" }, pushInfo, h("span", { class: "spacer" }), draftsBtn, pushBtn),
             h("div", { class: "editor-bar" },
               C.field("状态", stSel), C.field("发布日期", dateIn), h("span", { class: "spacer" }),
               h("button", { class: "btn small", onclick: () => C.copy((titleIn.value ? titleIn.value + "\n\n" : "") + bodyIn.value, "全文") }, "复制"),
@@ -104,6 +108,33 @@
         titleBox.hidden = true;
         undoBody = null; undoBtn.hidden = true;
         updateWc();
+        drawPush(c);
+      }
+
+      function drawPush(c) {
+        const pf = pfSel.value;
+        const r = c && c.pushes && c.pushes[pf];
+        pushBtn.textContent = pf === "douyin" ? "打开抖音创作页" : `推送到${C.platformName(pf)}草稿箱`;
+        draftsBtn.hidden = !(r && r.url) || pf === "douyin";
+        draftsBtn.textContent = `打开${C.platformName(pf)}草稿箱`;
+        pushInfo.replaceChildren(...(r ? [C.pushTag(c), h("span", { class: "muted small-text" }, " " + C.fmtDate(r.at) + (r.error ? " · " + r.error : ""))] : []));
+      }
+      pfSel.addEventListener("change", () => { markDirty(); drawPush(null); });
+
+      async function pushNow() {
+        const item = await save({ quiet: true });
+        if (!item) return;
+        pushBtn.disabled = true;
+        try {
+          const r = await C.push(item.id, { title: `推送「${(item.title || "").slice(0, 16)}」到${C.platformName(item.platform)}` });
+          if (r && r.status === "saved") window.Shell.toast(`已存入${C.platformName(item.platform)}草稿箱`, "success");
+          else if (r && r.status === "opened") window.Shell.toast("已打开抖音创作者中心，脚本已复制", "success", 4000);
+          else if (r) window.Shell.toast("内容已填好，请在弹出的窗口里确认是否保存", "info", 5000);
+        } catch (e) { C.err(e); }
+        finally {
+          pushBtn.disabled = false;
+          try { const c = await C.call(api.store.get("contents", item.id)); if (c && c.id === current.id) drawPush(c); } catch { /* ignore */ }
+        }
       }
 
       async function load(p) {
@@ -211,7 +242,10 @@
       this.load = load;
       this.confirmLeave = confirmLeave;
       this.loadMaterials = loadMaterials;
-      C.onData((what) => { if (what === "materials") loadMaterials(); });
+      C.onData((what) => {
+        if (what === "materials") loadMaterials();
+        if (what === "contents" && current.id) api.store.get("contents", current.id).then((c) => { if (c && c.id === current.id) drawPush(c); }).catch(() => {});
+      });
       loadMaterials();
     },
     async onShow() {

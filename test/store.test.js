@@ -63,3 +63,26 @@ test("坏文件不崩；stats 统计排期和逾期", () => {
   assert.deepEqual(st.overdue.map((x) => x.title), ["逾期"]);
   assert.equal(st.materials, 1);
 });
+
+test("运营账号、按账号筛选、推送记录、批量修改", () => {
+  const s = createStore(tmp());
+  const acc = s.accounts.upsert({ name: "  ", color: "red" });
+  assert.equal(acc.name, "未命名账号");
+  assert.equal(acc.color, "blue");
+  const a = s.contents.upsert({ title: "A", accountId: "x1", platform: "toutiao" });
+  s.contents.upsert({ title: "B", accountId: "x2", platform: "baijiahao" });
+  assert.equal(a.platform, "toutiao");
+  assert.deepEqual(s.contents.list({ accountId: "x1" }).map((c) => c.title), ["A"]);
+  assert.equal(s.contents.list().length, 2);
+  const p = s.contents.upsert({ id: a.id, pushes: { toutiao: { status: "saved", at: 5, url: "https://mp.toutiao.com/x", error: "" }, bad: { status: "saved" }, wechat: { status: "??", url: "javascript:1" } } });
+  assert.deepEqual(Object.keys(p.pushes).sort(), ["toutiao", "wechat"]);
+  assert.equal(p.pushes.wechat.status, "failed");
+  assert.equal(p.pushes.wechat.url, "");
+  const again = s.contents.upsert({ id: a.id, title: "A2" });
+  assert.equal(again.pushes.toutiao.status, "saved"); // 普通保存不丢推送记录
+  const n = s.contents.patchAll((c) => (c.accountId === "x2" ? { accountId: "x1" } : null));
+  assert.equal(n, 1);
+  assert.equal(s.contents.list({ accountId: "x1" }).length, 2);
+  assert.equal(stats(s, "2026-10-28", "x1").total, 2);
+  assert.equal(stats(s, "2026-10-28", "nobody").total, 0);
+});

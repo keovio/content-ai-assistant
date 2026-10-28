@@ -72,6 +72,18 @@ contextBridge.exposeInMainWorld("app", {
     remove: (name, id) => ipcRenderer.invoke("store:remove", name, id),
     stats: (today) => ipcRenderer.invoke("store:stats", today),
   },
+  // 平台：登录状态 / 登录 / 退出 / 打开后台或草稿箱；推送走后台任务 tasks.run("publish:push", { contentId })
+  publish: {
+    meta: () => ipcRenderer.invoke("publish:meta"),
+    status: (accountId) => ipcRenderer.invoke("publish:status", accountId),
+    login: (accountId, platform) => ipcRenderer.invoke("publish:login", accountId, platform),
+    logout: (accountId, platform) => ipcRenderer.invoke("publish:logout", accountId, platform),
+    open: (accountId, platform, which) => ipcRenderer.invoke("publish:open", accountId, platform, which),
+    openFor: (contentId) => ipcRenderer.invoke("publish:openFor", contentId),
+    openShots: () => ipcRenderer.invoke("publish:shots"),
+    onStatus: on("publish:status"),
+    onChanged: on("publish:changed"),
+  },
   content: {
     exportFile: (id) => ipcRenderer.invoke("content:export", id),
     copy: (text) => ipcRenderer.invoke("clipboard:write", text),

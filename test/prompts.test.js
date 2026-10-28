@@ -55,3 +55,16 @@ test("countWords：中文按字，英文按词", () => {
   assert.equal(P.countWords("你好 world 123"), 4);
   assert.equal(P.countWords(""), 0);
 });
+
+test("头条号 / 百家号规范、禁用词、自定义平台要求", () => {
+  const Pm = require("../lib/prompts");
+  assert.ok(Pm.PLATFORMS.toutiao && Pm.PLATFORMS.baijiahao);
+  const m = Pm.draftPrompt({ brand: { name: "号", banned: "最、第一" }, rules: { toutiao: "结尾加：关注我" }, topic: "x", platform: "toutiao" });
+  assert.match(m[0].content, /禁止使用的词：最、第一/);
+  assert.match(m[1].content, /今日头条文章/);
+  assert.match(m[1].content, /额外要求（优先遵守）：结尾加：关注我/);
+  const r = Pm.rewritePrompt({ source: "原文", platform: "baijiahao", rules: { baijiahao: "  " } });
+  assert.match(r[1].content, /百家号图文/);
+  assert.doesNotMatch(r[1].content, /额外要求/);
+  assert.equal(Pm.normalizeTopics([{ title: "t", platform: "baijiahao" }])[0].platform, "baijiahao");
+});

@@ -10,7 +10,7 @@
     icon: "bulb",
     order: 20,
     render(root) {
-      const { card, modules } = window.Shell;
+      const { card } = window.Shell;
       root.classList.add("page-wide");
       const s = window.Shell.getSettings();
       const fieldIn = h("input", { class: "input", placeholder: "例如：职场成长、母婴好物、AI 工具" });
@@ -20,21 +20,29 @@
       const genBtn = h("button", { class: "btn primary", onclick: generate }, "生成选题");
       const stopBtn = h("button", { class: "btn", hidden: true }, "停止");
       const status = h("p", { class: "muted small-text" });
-      const resultBox = h("div", { class: "topic-list" }, h("p", { class: "muted" }, "填好方向点「生成选题」。没填账号定位的话，先去设置里填一下效果更好。"));
-      const savedBox = h("div", { class: "topic-list" });
-      if (s.brandPositioning) fieldIn.placeholder = "默认按账号定位：" + s.brandPositioning.slice(0, 30);
+      const resultBox = h("div", { class: "topic-grid" }, h("p", { class: "muted" }, "填好方向点「生成选题」。账号定位写得越具体，选题越贴合。"));
+      const savedBox = h("div", { class: "topic-grid", hidden: true });
+      // 右侧：本次生成 / 已收藏 两个标签页，收藏不用一直占位置
+      const tabGen = h("button", { class: "active", onclick: () => showTab("gen") }, "本次生成");
+      const savedCount = h("span", { class: "tab-count" }, "0");
+      const tabSaved = h("button", { onclick: () => showTab("saved") }, "已收藏 ", savedCount);
+      const tabs = h("div", { class: "segmented" }, tabGen, tabSaved);
+      function showTab(which) {
+        tabGen.classList.toggle("active", which === "gen"); tabSaved.classList.toggle("active", which === "saved");
+        resultBox.hidden = which !== "gen"; savedBox.hidden = which !== "saved";
+      }
+      void s;
 
       root.append(
         h("header", { class: "page-head" }, h("div", {}, h("h1", {}, "选题灵感"), h("p", { class: "sub" }, "批量出选题，挑好的收藏或直接写成稿"))),
-        modules(
+        h("div", { class: "writer-grid" },
           card({ title: "找选题", icon: "search" },
             h("div", { class: "form" },
               C.field("领域 / 方向", fieldIn),
               C.field("热点 / 关键词", kwIn),
               h("div", { class: "form-row" }, C.field("平台", pfSel), C.field("数量", countSel)),
               h("div", { class: "actions" }, genBtn, stopBtn), status)),
-          card({ title: "生成结果", icon: "bulb", id: "topic-results" }, resultBox),
-          card({ title: "已收藏的选题", icon: "bookmark" }, savedBox)));
+          card({ title: "选题", icon: "bulb", id: "topic-results", actions: [tabs] }, resultBox, savedBox)));
 
       let taskId = null;
       stopBtn.onclick = () => { if (taskId) C.cancelTask(taskId); };
@@ -42,6 +50,7 @@
       async function generate() {
         genBtn.disabled = true; stopBtn.hidden = false;
         status.textContent = "AI 正在想选题…";
+        showTab("gen");
         resultBox.replaceChildren(h("div", { class: "progress" }, h("div", { class: "bar indeterminate" })));
         try {
           const r = await C.runAi("ai:topics", {
@@ -52,6 +61,7 @@
           if (!r) { status.textContent = "已停止"; resultBox.replaceChildren(); return; }
           status.textContent = `生成了 ${r.topics.length} 个选题`;
           resultBox.replaceChildren(...r.topics.map((t) => topicCard(t, false)));
+          showTab("gen");
         } catch (e) {
           status.textContent = "";
           resultBox.replaceChildren(h("p", { class: "error" }, e.message));
@@ -85,10 +95,11 @@
       async function loadSaved() {
         try {
           const list = await C.list("topics");
-          savedBox.replaceChildren(...(list.length ? list.map((t) => topicCard(t, true)) : [h("p", { class: "muted" }, "还没有收藏。")]));
+          savedCount.textContent = String(list.length);
+          savedBox.replaceChildren(...(list.length ? list.map((t) => topicCard(t, true)) : [h("p", { class: "muted" }, "还没有收藏。在生成结果里点「收藏」就会出现在这里。")]));
         } catch (e) { window.Shell.reportError(e); }
       }
-      C.onData((what) => { if (what === "topics") loadSaved(); });
+      C.onData((what) => { if (what === "topics" || what === "account") loadSaved(); });
       loadSaved();
     },
   });

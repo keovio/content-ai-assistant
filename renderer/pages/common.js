@@ -61,7 +61,7 @@
   // ---- 元数据 ----
   let metaCache = null;
   async function meta() { if (!metaCache) metaCache = await call(api.ai.meta()); return metaCache; }
-  const PLATFORM_NAMES = { wechat: "公众号", xiaohongshu: "小红书", douyin: "抖音" };
+  const PLATFORM_NAMES = { wechat: "公众号", xiaohongshu: "小红书", douyin: "抖音", toutiao: "头条号", baijiahao: "百家号" };
   const STATUS_NAMES = { idea: "选题", draft: "草稿", ready: "待发布", published: "已发布" };
   const platformName = (p) => PLATFORM_NAMES[p] || p || "";
   const statusName = (s) => STATUS_NAMES[s] || s || "";
@@ -112,7 +112,56 @@
   async function remove(name, id) { const r = await call(api.store.remove(name, id)); changed(name); return r; }
   const list = (name, filter) => call(api.store.list(name, filter));
 
+  // ---- 运营账号 ----
+  let accounts = [];
+  const currentAccountId = () => window.Shell.getSettings().currentAccount || "";
+  const currentAccount = () => accounts.find((a) => a.id === currentAccountId()) || accounts[0] || null;
+  async function loadAccounts() { accounts = (await call(api.store.list("accounts"))).sort((a, b) => a.createdAt - b.createdAt); drawSwitcher(); return accounts; }
+  const switcherSel = h("select", { class: "input acct-select", title: "切换运营账号", "aria-label": "运营账号" });
+  const switcherDot = h("span", { class: "acct-dot" });
+  const switcher = h("div", { class: "acct-switch" }, switcherDot, switcherSel);
+  function drawSwitcher() {
+    switcherSel.replaceChildren(...accounts.map((a) => h("option", { value: a.id }, a.name)), h("option", { value: "__manage" }, "管理账号…"));
+    const cur = currentAccount();
+    switcherSel.value = cur ? cur.id : "";
+    switcherDot.className = "acct-dot accent-" + ((cur && cur.color) || "blue");
+  }
+  switcherSel.addEventListener("change", () => {
+    if (switcherSel.value === "__manage") { drawSwitcher(); window.Shell.navigate("settings"); setTimeout(() => document.getElementById("settings-accounts")?.scrollIntoView({ behavior: "smooth" }), 150); return; }
+    switchAccount(switcherSel.value);
+  });
+  async function switchAccount(id) {
+    if (!accounts.some((a) => a.id === id)) return;
+    // 直接写主进程（不走防抖），保证接下来的数据请求已经按新账号筛选
+    window.Shell.saveSettings({ currentAccount: id });
+    await api.settings.set({ currentAccount: id });
+    drawSwitcher();
+    changed("account"); changed("contents"); changed("topics");
+    const a = currentAccount();
+    if (a) window.Shell.toast(`已切换到「${a.name}」`, "success", 1800);
+  }
+  window.Shell.onStart(() => {
+    const brand = document.querySelector("#sidebar .brand");
+    if (brand) brand.after(switcher);
+    loadAccounts().catch(window.Shell.reportError);
+    window.Shell.onSettings((c) => { if ("currentAccount" in c) drawSwitcher(); });
+  });
+
+  // ---- 推送到平台草稿箱 ----
+  const PUSH_NAMES = { pushing: "推送中", saved: "已存草稿", unknown: "待确认", failed: "推送失败", opened: "已打开创作页" };
+  function pushTag(content) {
+    const r = content && content.pushes && content.pushes[content.platform];
+    if (!r) return null;
+    return h("span", { class: `push-tag push-${r.status}`, title: r.error || fmtDate(r.at) }, PUSH_NAMES[r.status] || r.status);
+  }
+  // 推送一篇已保存的内容（后台任务，同平台自动排队）；返回 result 或抛错
+  async function push(contentId, { title } = {}) {
+    return runAi("publish:push", { contentId }, { title });
+  }
+  api.publish.onChanged(() => changed("contents"));
+
   window.Content = {
+    loadAccounts, currentAccount, currentAccountId, switchAccount, getAccounts: () => accounts.slice(), push, pushTag, PUSH_NAMES,
     call, runAi, cancelTask, open, take, meta, field, selectEl, platformOptions, statusOptions, platformTag, statusTag,
     platformName, statusName, countWords, splitTitle, today, ymd, fmtDate, copy, err, onData, changed, save, remove, list,
     PLATFORM_NAMES, STATUS_NAMES,

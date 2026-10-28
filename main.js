@@ -18,10 +18,13 @@ const { createLogger } = require("./lib/logger");
 const { createTaskManager } = require("./lib/tasks");
 const { setupShellIpc } = require("./lib/shell-ipc");
 const { setupContentIpc, CONTENT_SCHEMA } = require("./lib/content-ipc");
+const { createPublisher } = require("./lib/publish/publisher");
 
 const config = loadConfig(__dirname);
 const TIMEOUT_MS = 25000; // 所有页面加载 / 网络请求的超时上限
 const SMOKE = process.argv.includes("--smoke-test");
+// 应用图标：安装包图标用 build/icon.png；运行时图标用 asar 里这一份，换图标走增量包也能生效
+const APP_ICON = path.join(__dirname, "renderer", "assets", "icon.png");
 const NO_UPDATES = process.argv.includes("--no-updates") || process.env.APP_NO_UPDATES === "1";
 
 // 部分 Mac 上 Chromium 的 ANGLE Metal 后端编译着色器失败（日志里是 "Function main0 was not found"），
@@ -142,6 +145,8 @@ function createWindow() {
     return { action: "deny" };
   });
   win.webContents.on("will-navigate", (e, url) => { if (!url.startsWith("file:")) e.preventDefault(); });
+  // 主窗口关掉时，顺手关掉平台登录 / 推送窗口
+  win.on("closed", () => { for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.close(); });
   return withTimeout(win.loadFile(path.join(__dirname, "renderer", "index.html")), TIMEOUT_MS, "页面加载")
     .catch((err) => { log.error(err.message); });
 }
@@ -189,7 +194,11 @@ ipcMain.handle("update:openUrl", (_e, url) => { if (/^https:\/\//.test(String(ur
 
 setupShellIpc({ electron, settings, logger, tasks, dataDir: DATA_DIR, broadcast, getWindows: () => BrowserWindow.getAllWindows() });
 // 内容运营：AI 任务（选题/写稿/改写/标题/润色）、本地数据、AI 配置。AI 请求不走 25 秒超时（长文生成要更久），由 ai-client 自己做卡顿检测
-setupContentIpc({ electron, settings, tasks, logger, dataDir: DATA_DIR, broadcast, fetchImpl: (url, opts) => net.fetch(url, opts) });
+let publisher = null;
+const content = setupContentIpc({ electron, settings, tasks, logger, dataDir: DATA_DIR, broadcast, fetchImpl: (url, opts) => net.fetch(url, opts),
+  onAccountRemoved: (id) => { if (publisher) publisher.clearAccount(id).catch(() => {}); } });
+// 平台登录 / 打开草稿箱 / 自动存草稿
+publisher = createPublisher({ electron, logger, settings, tasks, store: content.store, broadcast, dataDir: DATA_DIR, iconPath: APP_ICON });
 
 // ---------------- CI 冒烟测试 ----------------
 function runSmokeTest() {
@@ -220,6 +229,11 @@ function runSmokeTest() {
       const saved = await a.store.upsert("materials", { title: "冒烟测试素材", content: "x" });
       const storeOk = !!(saved && saved.ok && saved.item.id) && (await a.store.remove("materials", saved.item.id)) === true;
       const aiMeta = await a.ai.meta();
+      // 运营账号自动建好；平台列表和登录状态能读
+      const accounts = await a.store.list("accounts");
+      const pubMeta = await a.publish.meta();
+      const pubStatus = await a.publish.status(accounts[0] && accounts[0].id);
+      const groups = !!document.getElementById("settings-group-custom") && !!document.getElementById("settings-group-system") && !!document.getElementById("settings-accounts");
       // 右侧运行日志面板能打开，外观设置能生效
       window.Shell.toggleLogDock(true);
       window.Shell.saveSettings({ background: "night", fontSize: 15 });
@@ -237,13 +251,16 @@ function runSmokeTest() {
         theme: document.documentElement.dataset.theme || "",
         task: task && task.status,
         logCount: logs.length, dock, look, storeOk, providers: aiMeta.providers.length,
+        accounts: accounts.length, publish: Array.isArray(pubMeta) ? pubMeta.length : 0, publishStatus: !!(pubStatus && pubStatus.wechat), groups,
+        switcher: !!document.querySelector("#sidebar .acct-switch select"),
         info, source: upd.source,
       };
     })()`, true), TIMEOUT_MS, "页面脚本");
     const result = { ...out, layerVersion: LAYER_VERSION, boot: { source: BOOT.source, version: BOOT.version, bundled: BOOT.bundledVersion, electron: BOOT.electron }, platform: process.platform, rendererErrors: errors };
     const ok = out.api && out.nodeHidden && out.card && out.name === config.productName && out.version.includes(LAYER_VERSION)
-      && ["home", "topics", "writer", "rewrite", "materials", "calendar", "tasks", "logs", "settings"].every((p) => out.navs.includes(p)) && out.settingsVisible
-      && /^(light|dark)$/.test(out.theme) && out.task === "done" && out.logCount > 0 && out.dock && out.look && out.storeOk && out.providers > 0 && !errors.length;
+      && ["home", "topics", "writer", "library", "rewrite", "materials", "calendar", "tasks", "logs", "settings"].every((p) => out.navs.includes(p)) && out.settingsVisible
+      && /^(light|dark)$/.test(out.theme) && out.task === "done" && out.logCount > 0 && out.dock && out.look && out.storeOk && out.providers > 0
+      && out.accounts >= 1 && out.publish === 5 && out.publishStatus && out.groups && out.switcher && !errors.length;
     console.log((ok ? "SMOKE OK " : "SMOKE FAIL ") + JSON.stringify(result));
     clearTimeout(hardStop);
     BOOT.markGood();
@@ -253,9 +270,6 @@ function runSmokeTest() {
   if (mainWindow.webContents.isLoading()) mainWindow.webContents.once("did-finish-load", go); else go();
 }
 
-// 应用图标：安装包图标用 build/icon.png；运行时图标用 asar 里这一份，换图标走增量包也能生效
-const APP_ICON = path.join(__dirname, "renderer", "assets", "icon.png");
-
 // ---------------- 启动 ----------------
 if (gotLock) {
   app.whenReady().then(() => {
@@ -263,7 +277,7 @@ if (gotLock) {
     createWindow();
     if (SMOKE) { runSmokeTest(); return; }
     if (!NO_UPDATES && settings.get("autoCheckUpdate")) setTimeout(() => { checkUpdate({ auto: true }).catch(() => {}); }, 6000);
-    app.on("activate", () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
+    app.on("activate", () => { if (!mainWindow || mainWindow.isDestroyed()) createWindow(); });
   });
   // macOS 习惯：关掉窗口应用仍留在 Dock；其他系统直接退出
   app.on("window-all-closed", () => { if (process.platform !== "darwin") app.quit(); });

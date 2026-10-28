@@ -34,10 +34,11 @@
               quick("选题灵感", "按账号定位批量出选题", go("topics")),
               quick("AI 写稿", "选题 + 大纲 → 成稿", go("writer", { fresh: true })),
               quick("一稿多发", "一篇改成多平台版本", go("rewrite")),
+              quick("稿件管理", "找稿、推送草稿箱", go("library")),
               quick("记素材", "金句、数据、链接", go("materials", { add: true })))),
           card({ title: "AI 模型", icon: "spark", actions: [h("button", { class: "btn small ghost", onclick: () => window.Shell.navigate("settings") }, "设置")] }, aiBox),
-          card({ title: "账号定位", icon: "user", desc: "所有 AI 输出都会按这里的定位和语气来写", actions: [h("button", { class: "btn small ghost", onclick: () => window.Shell.navigate("settings") }, "编辑")] }, brandBox),
-          card({ title: "最近内容", icon: "note", actions: [h("button", { class: "btn small ghost", onclick: go("calendar") }, "全部")] }, recentBox)));
+          card({ title: "当前运营账号", icon: "user", desc: "所有 AI 输出都会按这个账号的定位和语气来写，侧栏顶部可切换", actions: [h("button", { class: "btn small ghost", onclick: () => { window.Shell.navigate("settings"); setTimeout(() => document.getElementById("settings-accounts")?.scrollIntoView({ behavior: "smooth" }), 150); } }, "编辑")] }, brandBox),
+          card({ title: "最近稿件", icon: "note", actions: [h("button", { class: "btn small ghost", onclick: go("library") }, "稿件管理")] }, recentBox)));
 
       function quick(title, desc, onclick) {
         return h("button", { class: "quick", onclick }, h("b", {}, title), h("span", { class: "muted" }, desc));
@@ -64,10 +65,11 @@
             kv("API Key", key.set ? `已设置（…${key.tail}）` : h("span", { class: "warn" }, "未设置，AI 功能用不了")),
             h("div", { class: "actions" }, h("button", { class: "btn small", onclick: testAi }, "测试连接")));
 
-          const empty = !s.brandName && !s.brandPositioning;
-          brandBox.replaceChildren(...(empty
-            ? [h("p", { class: "muted" }, "还没填账号定位。填上账号名、定位、目标读者和语气，AI 写出来会更像你。")]
-            : [kv("账号", s.brandName || "—"), kv("定位", s.brandPositioning || "—"), kv("读者", s.brandAudience || "—"), kv("语气", s.brandTone || "—")]));
+          await C.loadAccounts();
+          const a = C.currentAccount() || {};
+          brandBox.replaceChildren(kv("账号", a.name || "—"), ...(a.positioning
+            ? [kv("定位", a.positioning), kv("读者", a.audience || "—"), kv("语气", a.tone || "—")]
+            : [h("p", { class: "muted" }, "还没填这个账号的定位。填上定位、目标读者和语气，AI 写出来会更像你。")]));
 
           recentBox.replaceChildren(...(recent.length ? recent.slice(0, 6).map((c) => itemRow(c, C.fmtDate(c.updatedAt)))
             : [h("p", { class: "muted" }, "还没有内容。从「找选题」或「写一篇」开始吧。")]));

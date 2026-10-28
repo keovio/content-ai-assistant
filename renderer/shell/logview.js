@@ -11,6 +11,17 @@
   const RANK = { debug: 0, info: 1, warn: 2, error: 3 };
   const pad = (n, w = 2) => String(n).padStart(w, "0");
   const ts = (t) => { const d = new Date(t); return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)}`; };
+  const LEVEL_ICON = { debug: "·", info: "i", warn: "!", error: "×" };
+  const dayTime = (t) => { const d = new Date(t); const today = new Date(); const same = d.toDateString() === today.toDateString(); return (same ? "" : `${d.getMonth() + 1}月${d.getDate()}日 `) + `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+  // 模块名 → 中文标签和颜色（任务的日志用任务标题做模块名）
+  const SCOPES = { main: ["应用", "gray"], update: ["更新", "teal"], shell: ["界面", "gray"], content: ["内容", "violet"], task: ["任务", "blue"], publish: ["推送", "orange"], renderer: ["页面", "gray"] };
+  const PALETTE = ["blue", "violet", "green", "orange", "teal", "pink"];
+  function scopeInfo(scope) {
+    if (!scope) return { label: "", color: "gray" };
+    if (SCOPES[scope]) return { label: SCOPES[scope][0], color: SCOPES[scope][1] };
+    let n = 0; for (const ch of scope) n = (n * 31 + ch.charCodeAt(0)) >>> 0;
+    return { label: scope.length > 10 ? scope.slice(0, 10) + "…" : scope, color: PALETTE[n % PALETTE.length] };
+  }
   const line = (e) => `${ts(e.time)} [${e.level.toUpperCase()}]${e.scope ? ` [${e.scope}]` : ""} ${e.message}`;
 
   // 所有日志视图共用一份条目，只向主进程取一次
@@ -38,19 +49,37 @@
     let query = "";
     let follow = true;
 
-    const levelSel = h("select", { class: "input input-sm", title: "最低级别", onchange: () => { level = levelSel.value; redraw(); } },
-      h("option", { value: "" }, "全部"),
-      ...["debug", "info", "warn", "error"].map((l) => h("option", { value: l }, `${LEVEL_TEXT[l]}+`)));
+    const levelSel = compact
+      ? h("div", { class: "log-chips", role: "radiogroup" }, ...[["", "全部"], ["info", "信息"], ["warn", "警告"], ["error", "错误"]].map(([v, l]) =>
+        h("button", { class: "log-chip" + (v === "" ? " active" : ""), dataset: { value: v }, onclick: (e) => {
+          level = v; for (const b of levelSel.children) b.classList.toggle("active", b === e.currentTarget); redraw();
+        } }, l)))
+      : h("select", { class: "input input-sm", title: "最低级别", onchange: () => { level = levelSel.value; redraw(); } },
+        h("option", { value: "" }, "全部"),
+        ...["debug", "info", "warn", "error"].map((l) => h("option", { value: l }, `${LEVEL_TEXT[l]}+`)));
     const search = h("input", { class: "input input-sm grow", type: "search", placeholder: "搜索…", oninput: window.Shell.debounce(() => { query = search.value.trim().toLowerCase(); redraw(); }, 150) });
     const list = h("div", { class: "log-list" + (compact ? " compact" : ""), tabindex: "0" });
     const count = h("span", { class: "muted small log-count" });
     const followBtn = iconBtn("arrowDown", "自动滚动到最新", () => { follow = !follow; followBtn.classList.toggle("on", follow); if (follow) scrollEnd(); }, "on");
 
     const match = (e) => (!level || RANK[e.level] >= RANK[level]) && (!query || e.message.toLowerCase().includes(query) || e.scope.toLowerCase().includes(query));
+    // 面板里的一条：左边色条表示级别，第一行 时间 + 模块标签，第二行消息；隔了 2 分钟以上插一条时间分隔
+    let lastTime = 0;
+    const compactRow = (e) => {
+      const nodes = [];
+      if (e.time - lastTime > 120000) nodes.push(h("div", { class: "log-sep" }, h("span", {}, dayTime(e.time))));
+      lastTime = e.time;
+      const sc = scopeInfo(e.scope);
+      nodes.push(h("div", { class: `log-item ${e.level}` },
+        h("div", { class: "log-meta" },
+          h("span", { class: "log-badge " + e.level }, LEVEL_ICON[e.level] || "·"),
+          sc.label ? h("span", { class: `log-tag tag-${sc.color}` }, sc.label) : null,
+          h("span", { class: "log-time" }, ts(e.time).slice(0, 8))),
+        h("div", { class: "log-msg" }, e.message)));
+      return nodes;
+    };
     const row = compact
-      ? (e) => h("div", { class: `log-row ${e.level}` },
-        h("span", { class: "log-time" }, ts(e.time).slice(0, 8)),
-        h("span", { class: "log-msg" }, e.scope ? h("span", { class: "log-scope" }, e.scope + " ") : null, e.message))
+      ? compactRow
       : (e) => h("div", { class: `log-row ${e.level}` },
         h("span", { class: "log-time" }, ts(e.time)),
         h("span", { class: "log-level" }, LEVEL_TEXT[e.level] || e.level),
@@ -60,7 +89,8 @@
     const shown = () => store.entries.filter(match);
     function redraw() {
       const s = shown();
-      list.replaceChildren(...s.slice(-MAX_ROWS).map(row));
+      lastTime = 0;
+      list.replaceChildren(...s.slice(-MAX_ROWS).flatMap(row));
       count.textContent = `${s.length} 条`;
       if (follow) scrollEnd();
     }
@@ -68,7 +98,7 @@
       const add = batch.filter(match);
       if (!add.length) return;
       const atEnd = list.scrollHeight - list.scrollTop - list.clientHeight < 24;
-      list.append(...add.map(row));
+      list.append(...add.flatMap(row));
       while (list.childElementCount > MAX_ROWS) list.firstElementChild.remove();
       count.textContent = `${shown().length} 条`;
       if (follow && atEnd) scrollEnd();
@@ -131,6 +161,28 @@
       if (sz) sz.textContent = String(s.logFontSize || 12);
     }
   }
+  // 面板顶部：正在跑的后台任务（标题、当前步骤、进度条、停止）
+  function taskPanel() {
+    const box = h("div", { class: "dock-tasks", hidden: true });
+    const live = new Map();
+    // 进度条宽度用 style 属性赋值（CSP 不允许 style="" 字符串）
+    const bar = (t) => { const b = h("div", { class: "bar" + (t.pct == null ? " indeterminate" : "") }); if (t.pct != null) b.style.width = Math.max(2, Math.min(100, t.pct)) + "%"; return h("div", { class: "progress" }, b); };
+    const draw = () => {
+      const list = [...live.values()].filter((t) => t.status === "running" || t.status === "queued");
+      box.hidden = !list.length;
+      box.replaceChildren(...list.map((t) => h("div", { class: "dock-task" },
+        h("div", { class: "dock-task-head" },
+          h("span", { class: "dock-task-dot" + (t.status === "queued" ? " queued" : "") }),
+          h("span", { class: "dock-task-title" }, t.title),
+          t.cancellable ? h("button", { class: "btn small ghost", onclick: () => api.tasks.cancel(t.id) }, "停止") : null),
+        h("div", { class: "dock-task-msg" }, t.status === "queued" ? "排队中…" : (t.message || "进行中…")),
+        bar(t))));
+    };
+    api.tasks.list().then((l) => { for (const t of l) live.set(t.id, t); draw(); }).catch(() => {});
+    api.tasks.onChange((t) => { live.set(t.id, t); if (!(t.status === "running" || t.status === "queued")) setTimeout(() => { live.delete(t.id); draw(); }, 1500); draw(); });
+    return box;
+  }
+
   function buildDock(dock) {
     dockView = createLogView({ compact: true });
     dock.append(
@@ -144,6 +196,7 @@
         iconBtn("copy", "复制", () => dockView.copy()),
         iconBtn("trash", "清空", () => dockView.clear()),
         iconBtn("close", "收起（Ctrl/⌘ + L）", () => toggleLogDock(false))),
+      taskPanel(),
       dockView.toolbar,
       dockView.list);
   }
@@ -201,6 +254,13 @@
       if (window.Shell.getSettings().logDockOpen) return;
       const n = batch.filter((e) => e.level === "error").length;
       if (n) { unseen += n; drawDot(); }
+    });
+    // 有后台任务开始时自动展开面板（设置里可关）
+    const seen = new Set();
+    api.tasks.onChange((t) => {
+      if (seen.has(t.id)) return;
+      seen.add(t.id);
+      if ((t.status === "running" || t.status === "queued") && window.Shell.getSettings().logAutoOpen !== false && !window.Shell.getSettings().logDockOpen) toggleLogDock(true);
     });
     applyDock();
   });
