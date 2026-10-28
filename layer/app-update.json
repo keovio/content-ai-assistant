@@ -1,0 +1,19 @@
+{
+  "version": "0.5.5",
+  "electron": "33.4.11",
+  "bootstrap": 1,
+  "sha256": "9cdc7b08256f425cc596bb241ddf9c114245afe0f2e36cd618d5e1da32846e9e",
+  "size": 840270,
+  "asarUrl": "https://github.com/keovio/content-ai-assistant/releases/download/v0.5.5/app-update.asar",
+  "installers": {
+    "mac": {
+      "arm64": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-mac-arm64.dmg",
+      "x64": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-mac-x64.dmg"
+    },
+    "win": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-win-x64.exe",
+    "linux": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-linux-x64.AppImage"
+  },
+  "releaseUrl": "https://github.com/keovio/content-ai-assistant/releases/tag/v0.5.5",
+  "notes": "工作台「账号数据」新增本日 / 本周 / 本月增长和每日柱状图（粉丝、阅读、收益可切换，每天自动存一份快照）；修复百家号账号数据读不到（适配新版后台标签，并从后台接口补数据，仍读不到时把页面内容记进日志方便排查）；素材库改版：左边一列放「记一条」「上传图片」，「全部素材」占右边两格",
+  "publishedAt": "2026-10-28T12:42:37.888Z"
+}
