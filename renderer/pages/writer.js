@@ -76,7 +76,7 @@
         if (undoBody === null) return;
         bodyIn.value = undoBody; undoBody = null; undoBtn.hidden = true; markDirty(); updateWc();
       } }, "撤销 AI 修改");
-      const polishSel = C.selectEl([["polish", "润色"], ["shorten", "精简"], ["expand", "扩写"], ["casual", "口语化"], ["formal", "专业化"], ["original", "降重改写"], ["compliance", "合规改写"]], "polish");
+      const polishSel = C.selectEl([["polish", "润色"], ["shorten", "精简"], ["expand", "扩写"], ["casual", "口语化"], ["formal", "专业化"], ["humanize", "去AI味"], ["original", "降重改写"], ["compliance", "合规改写"]], "polish");
 
       let current = { id: "", refId: "", groupId: "", platformAccountId: "" };
       let ref = null;

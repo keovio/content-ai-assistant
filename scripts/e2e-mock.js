@@ -57,6 +57,7 @@ function card(id) {
 }
 function aiReply(messages) {
   const u = messages[messages.length - 1].content;
+  if (/^去AI味/.test(u)) return ((u.match(/"""\n([\s\S]*)\n"""/) || [])[1] || "");
   if (/对标拆解/.test(u)) {
     const t = (u.match(/标题：(.*)/) || [])[1] || "";
     return JSON.stringify({
