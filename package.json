@@ -1,0 +1,23 @@
+{
+  "name": "content-ai-assistant",
+  "version": "0.1.0",
+  "description": "内容AI运营助手：选题灵感、AI 写稿、一稿多发、素材库、内容日历（基于 electron-app-template）",
+  "main": "boot/bootstrap.js",
+  "private": true,
+  "license": "MIT",
+  "author": "keovio",
+  "scripts": {
+    "start": "electron .",
+    "check": "node scripts/check.js",
+    "test": "node --test \"test/*.test.js\"",
+    "pack": "electron-builder --config electron-builder.config.js --dir --publish never",
+    "dist": "electron-builder --config electron-builder.config.js --publish never",
+    "smoke": "node scripts/smoke.js",
+    "build:layer": "node build/build-layer.js"
+  },
+  "devDependencies": {
+    "@electron/asar": "3.4.1",
+    "electron": "^33.2.1",
+    "electron-builder": "^26.0.12"
+  }
+}

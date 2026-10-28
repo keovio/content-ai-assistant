@@ -1,0 +1,9 @@
+{
+  "appName": "content-ai-assistant",
+  "productName": "内容AI运营助手",
+  "appId": "com.keovio.contentaiassistant",
+  "repo": "keovio/content-ai-assistant",
+  "tagPrefix": "v",
+  "channelTag": "latest-layer",
+  "mirrors": ["", "https://ghfast.top/"]
+}
