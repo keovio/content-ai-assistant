@@ -50,7 +50,7 @@ const DATA_DIR = process.env.APP_DATA_DIR || app.getPath("userData");
 // 自己的设置项加在这里，例如 { ...BASE_SCHEMA, exportDir: { type: "string", default: "" } }
 const settings = createSettings({ file: path.join(DATA_DIR, "settings.json"), schema: { ...BASE_SCHEMA, ...CONTENT_SCHEMA } });
 const logger = createLogger({ dir: path.join(DATA_DIR, "logs"), level: settings.get("logLevel"), echo: !app.isPackaged || SMOKE });
-const tasks = createTaskManager({ concurrency: 4, logger });
+const tasks = createTaskManager({ concurrency: 6, logger }); // 写稿、取标题、平台版本、批量创作可以同时跑
 const log = logger.scope("main");
 logger.prune();
 log.info(`启动 ${config.productName} ${LAYER_VERSION}（${BOOT.source === "update" ? "已更新的应用层" : "安装包内置"}，Electron ${process.versions.electron}，${process.platform}-${process.arch}）`);
@@ -200,7 +200,7 @@ let publisher = null;
 const content = setupContentIpc({ electron, settings, tasks, logger, dataDir: DATA_DIR, broadcast, fetchImpl: (url, opts) => net.fetch(url, opts),
   onAccountRemoved: (id) => { if (publisher) publisher.clearAccount(id).catch(() => {}); } });
 // 平台号（多号登录）/ 打开草稿箱 / 自动存草稿
-publisher = createPublisher({ electron, logger, settings, tasks, store: content.store, broadcast, dataDir: DATA_DIR, iconPath: APP_ICON });
+publisher = createPublisher({ electron, logger, settings, tasks, store: content.store, broadcast, dataDir: DATA_DIR, iconPath: APP_ICON, imageFile: (name) => content.images.fileOf(name) });
 // 找爆款（后台窗口搜索 / 读正文 / 今日热点）+ 对标拆解 + 定时自动创作
 const discover = createDiscover({ electron, logger, store: content.store, fetchImpl: timedFetch, iconPath: APP_ICON });
 const automation = createAutomation({ tasks, store: content.store, settings, logger, discover, content, publisher, broadcast });
@@ -215,7 +215,14 @@ const automation = createAutomation({ tasks, store: content.store, settings, log
   dh("discover:overlap", (text, refId) => automation.overlapOf(String(text || ""), String(refId || "")));
   dh("discover:duplicate", (item) => automation.findDuplicate(item && typeof item === "object" ? item : {}));
   dh("auto:status", () => automation.status());
-  dh("auto:runNow", () => ({ ok: true, task: tasks.run("auto:run", { trigger: "manual" }, { title: "自动创作（立即运行一次）" }) }));
+  dh("auto:runNow", (jobId) => {
+    const job = automation.jobs().find((j) => j.id === String(jobId || "")) || automation.jobs()[0];
+    // 不同任务可以同时跑；同一个任务正在跑时不重复启动
+    if (job && automation.scheduler.isRunning(job.id)) return { ok: false, busy: true, error: `「${job.name}」正在运行，等这一轮结束再试` };
+    return { ok: true, task: tasks.run("auto:run", { trigger: "manual", jobId: job ? job.id : "" }, { title: `自动创作（立即运行一次）${job ? "：" + job.name : ""}` }) };
+  });
+  dh("auto:jobs", () => automation.jobs());
+  dh("auto:saveJobs", (list) => { const r = automation.saveJobs(Array.isArray(list) ? list : []); broadcast("auto:changed", {}); return r; });
   settings.onChange((changed) => { if (Object.keys(changed).some((k) => k.startsWith("auto"))) broadcast("auto:changed", {}); });
 }
 

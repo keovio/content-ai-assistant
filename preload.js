@@ -64,6 +64,17 @@ contextBridge.exposeInMainWorld("app", {
     test: () => ipcRenderer.invoke("ai:test"),
     onDelta: on("ai:delta"),
   },
+  // 写法库（从拆解库汇总）：list(选题) → { list, auto: 按选题自动挑中的 id }
+  techniques: { list: (topic) => ipcRenderer.invoke("techniques:list", topic) },
+  // 配图：独立的生图设置（服务商 / Key / 测试），缩略图只能读应用自己的 images 目录
+  images: {
+    meta: () => ipcRenderer.invoke("images:meta"),
+    keyInfo: () => ipcRenderer.invoke("images:keyInfo"),
+    setKey: (key) => ipcRenderer.invoke("images:setKey", key),
+    useProvider: (id) => ipcRenderer.invoke("images:useProvider", id),
+    test: () => ipcRenderer.invoke("images:test"),
+    dataUrl: (name) => ipcRenderer.invoke("images:dataUrl", name),
+  },
   // 本地数据：集合 contents（内容）/ materials（素材）/ topics（收藏的选题）/ breakdowns（拆解库）/ platformAccounts、autoRuns（只读）
   store: {
     list: (name, filter) => ipcRenderer.invoke("store:list", name, filter),
@@ -101,7 +112,9 @@ contextBridge.exposeInMainWorld("app", {
   // 定时自动创作：status() 开关 / 下次运行时间 / 最近运行；runNow() 立即运行一次
   auto: {
     status: () => ipcRenderer.invoke("auto:status"),
-    runNow: () => ipcRenderer.invoke("auto:runNow"),
+    runNow: (jobId) => ipcRenderer.invoke("auto:runNow", jobId),
+    jobs: () => ipcRenderer.invoke("auto:jobs"),
+    saveJobs: (list) => ipcRenderer.invoke("auto:saveJobs", list),
     onChanged: on("auto:changed"),
   },
   // 主进程改了数据（自动创作写稿、拆解入库）：onData(({ what }) => …)

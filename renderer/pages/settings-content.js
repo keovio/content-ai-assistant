@@ -68,6 +68,51 @@
     },
   });
 
+  // ---------------- 配图（独立的生图设置） ----------------
+  window.Shell.registerSettingsSection({
+    id: "images", title: "配图", icon: "image", order: 1.5,
+    render(box) {
+      const { row, toggle, select } = window.Shell.settingsUI;
+      const provSel = h("select", { class: "input" });
+      const keyIn = h("input", { class: "input", type: "password", placeholder: "粘贴生图服务的 API Key", autocomplete: "off" });
+      const keyState = h("span", { class: "muted small-text" });
+      const testOut = h("span", { class: "muted small-text" });
+      const testImg = h("img", { class: "img-test", hidden: true, alt: "测试图" });
+      C.call(api.images.meta()).then((m) => {
+        provSel.replaceChildren(...m.providers.map((p) => h("option", { value: p.id }, p.name)));
+        provSel.value = window.Shell.getSettings().imageProvider;
+      }).catch(window.Shell.reportError);
+      provSel.addEventListener("change", () => C.call(api.images.useProvider(provSel.value)).catch(C.err));
+      window.Shell.onSettings((c, st) => { if ("imageProvider" in c) provSel.value = st.imageProvider; });
+      async function showKey() {
+        try { const k = await C.call(api.images.keyInfo()); keyState.textContent = k.set ? `已保存（…${k.tail}）` : "还没有保存生图的 API Key（和写稿模型的 Key 分开）"; }
+        catch (e) { keyState.textContent = e.message; }
+      }
+      const saveKey = async () => {
+        if (!keyIn.value.trim()) { window.Shell.toast("先粘贴 API Key", "info"); return; }
+        try { await C.call(api.images.setKey(keyIn.value.trim())); keyIn.value = ""; window.Shell.toast("生图 API Key 已保存", "success"); showKey(); } catch (e) { C.err(e); }
+      };
+      keyIn.addEventListener("keydown", (e) => { if (e.key === "Enter") saveKey(); });
+      showKey();
+      box.append(
+        h("p", { class: "card-desc" }, "写稿模型和生图分开设置。配图时 AI 先按文章写画面描述，再用这里的生图服务出图：封面存为稿子的封面，文中配图插进正文；推送草稿箱时连图一起填进去。下面的张数、尺寸、画风都可以不填，默认按文章内容自动判断。"),
+        row("服务商", "智谱 CogView-3-Flash 免费；硅基流动有 Kolors / FLUX；也可以填任何 OpenAI 兼容的 /images/generations 接口", provSel),
+        row("接口地址", "", textInput("imageBaseUrl", { placeholder: "https://…" }), { stack: true }),
+        row("模型", "例如 cogview-3-flash、Kwai-Kolors/Kolors、dall-e-3", textInput("imageModel", { placeholder: "模型名" })),
+        row("API Key", keyState, h("div", { class: "actions" }, keyIn, h("button", { class: "btn", onclick: saveKey }, "保存"),
+          h("button", { class: "btn ghost", onclick: async () => { if (!(await window.Shell.confirm("清除已保存的生图 API Key？"))) return; await C.call(api.images.setKey("")).catch(C.err); showKey(); } }, "清除")), { stack: true }),
+        row("每篇几张（可不填）", "文中配图张数；自动 = AI 按文章长度和内容判断（一般每 400–600 字一张）", select("imageCount", [[-1, "自动"], [0, "0 张（只要封面）"], [1, "1 张"], [2, "2 张"], [3, "3 张"], [4, "4 张"], [5, "5 张"], [6, "6 张"]], { parse: Number })),
+        row("封面图", "额外生成一张封面（横图）", toggle("imageCover")),
+        row("尺寸（可不填）", "自动 = 小红书 / 抖音竖图，其他平台横图", select("imageShape", [["auto", "自动"], ["landscape", "横图"], ["square", "方图"], ["portrait", "竖图"]])),
+        row("画风（可不填）", "不填就由 AI 按文章调性决定，全篇统一", textInput("imageStyle", { placeholder: "例如：扁平插画，干净明亮；或：胶片摄影感，暖色调" }), { stack: true }),
+        row("测试生图", testOut, h("div", { class: "actions" }, h("button", { class: "btn", onclick: async (e) => {
+          const b = e.currentTarget; b.disabled = true; testOut.textContent = "正在生成一张测试图…（可能要几十秒）"; testImg.hidden = true;
+          try { const r = await C.call(api.images.test()); testOut.textContent = `生图正常：${r.model}，${Math.round(r.ms / 1000)} 秒`; testImg.src = await C.call(api.images.dataUrl(r.name)); testImg.hidden = false; }
+          catch (err) { testOut.textContent = err.message; } finally { b.disabled = false; }
+        } }, "测试"), testImg), { stack: true }));
+    },
+  });
+
   // ---------------- 运营账号 ----------------
   window.Shell.registerSettingsSection({
     id: "accounts", title: "运营账号与定位", icon: "user", order: 2,
@@ -179,72 +224,115 @@
     },
   });
 
-  // ---------------- 定时自动创作 ----------------
+  // ---------------- 定时自动创作（可以建多个任务） ----------------
   window.Shell.registerSettingsSection({
     id: "auto", title: "定时自动创作", icon: "spark", order: 4,
     render(box) {
-      const { row, toggle, range, select } = window.Shell.settingsUI;
-      const st = () => window.Shell.getSettings();
-      // 多选框组：保存成逗号分隔的字符串
-      function checks(key, options) {
-        const wrap = h("div", { class: "check-row" });
-        const draw = () => {
-          const cur = new Set(String(st()[key] || "").split(/[,，\s]+/).filter(Boolean));
-          wrap.replaceChildren(...options.map(([v, l]) => h("label", { class: "check" }, h("input", { type: "checkbox", value: v, checked: cur.has(String(v)),
-            onchange: () => window.Shell.saveSettings({ [key]: [...wrap.querySelectorAll("input:checked")].map((i) => i.value).join(",") }) }), l)));
-        };
-        draw();
-        window.Shell.onSettings((c) => { if (key in c && !wrap.contains(document.activeElement)) draw(); });
-        return wrap;
-      }
-      const timesHint = h("span", { class: "muted small-text" });
-      const timesIn = textInput("autoTimes", { placeholder: "例如 08:30, 20:00（可以多个，逗号隔开）" });
-      const drawTimesHint = () => {
-        const list = String(st().autoTimes || "").split(/[,，;；\s、]+/).filter(Boolean);
-        const ok = list.filter((t) => /^(\d{1,2})[:：](\d{1,2})$/.test(t) && Number(t.split(/[:：]/)[0]) < 24 && Number(t.split(/[:：]/)[1]) < 60);
-        timesHint.textContent = ok.length ? `每天 ${ok.length} 次` + (ok.length < list.length ? `（${list.length - ok.length} 个格式不对，已忽略）` : "") : "还没有有效的时间";
-      };
-      drawTimesHint();
-      window.Shell.onSettings((c) => { if ("autoTimes" in c) drawTimesHint(); });
-      const statusBox = h("div", { class: "auto-status" });
-      const runBtn = h("button", { class: "btn primary", onclick: runNow }, "立即运行一次");
+      const { row, range } = window.Shell.settingsUI;
+      const WD = [["1", "周一"], ["2", "周二"], ["3", "周三"], ["4", "周四"], ["5", "周五"], ["6", "周六"], ["7", "周日"]];
+      const SRC = [["wechat", "公众号（搜狗）"], ["toutiao", "头条"], ["baijiahao", "百家号"], ["xiaohongshu", "小红书（需登录）"], ["douyin", "抖音（需登录）"]];
+      const DAYS = [[1, "近 1 天"], [3, "近 3 天"], [7, "近 7 天"], [30, "近 30 天"], [0, "不限"]];
+      let jobs = [], status = null, saveTimer = null;
+      const listBox = h("div", { class: "auto-jobs" });
+      const historyBox = h("div", { class: "auto-status" });
+      const addBtn = h("button", { class: "btn", onclick: addJob }, "＋ 新建定时任务");
+      const fmtNext = (ts) => { const d = new Date(ts); return `${d.getMonth() + 1}月${d.getDate()}日 ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+      const validTimes = (v) => String(v || "").split(/[,，;；\s、]+/).filter(Boolean).filter((t) => /^(\d{1,2})[:：](\d{1,2})$/.test(t) && Number(t.split(/[:：]/)[0]) < 24 && Number(t.split(/[:：]/)[1]) < 60);
 
       box.append(
-        h("p", { class: "card-desc" }, "到点自动：找爆款 → 跳过拆过的 → 拆解 → 写原创 → 推草稿箱。只存草稿不发布；与原文重合度超过上限的不推送，并标记「需改写」。应用需要开着才会运行（电脑睡眠错过的时段，醒来 15 分钟内会补跑）。"),
-        row("开启", "按下面的时间自动运行", toggle("autoEnabled")),
-        row("时间", timesHint, timesIn, { stack: true }),
-        row("星期", "不勾 = 每天", checks("autoWeekdays", [["1", "周一"], ["2", "周二"], ["3", "周三"], ["4", "周四"], ["5", "周五"], ["6", "周六"], ["7", "周日"]]), { stack: true }),
-        row("关键词", "去找哪些话题的爆款，逗号或换行隔开；按顺序搜，凑够篇数就停", textInput("autoKeywords", { placeholder: "例如：AI 工具, 职场效率", multiline: true, rows: 2 }), { stack: true }),
-        row("去哪找爆款", "小红书 / 抖音需要先在「对标拆解 → 找爆款」里登录网页版", select("autoSource", [["wechat", "公众号（搜狗）"], ["toutiao", "头条"], ["baijiahao", "百家号"], ["xiaohongshu", "小红书（需登录）"], ["douyin", "抖音（需登录）"]])),
-        row("只看近几天", "", select("autoDays", [[1, "近 1 天"], [3, "近 3 天"], [7, "近 7 天"], [30, "近 30 天"], [0, "不限"]], { parse: Number })),
-        row("每次几篇", "每轮最多拆解并创作几篇", range("autoCount", { min: 1, max: 10, step: 1, format: (v) => v + " 篇" })),
-        row("写成哪些平台", "第一个平台按骨架写原创，其余平台在它的基础上改写", checks("autoTargets", Object.entries(C.PLATFORM_NAMES)), { stack: true }),
-        row("自动推草稿箱", "写好后推送到对应平台的草稿箱（用绑定当前运营账号的平台号）", toggle("autoPush")),
-        row("重合度上限", "与原文重合度超过这个值就不推送、标记「需改写」（手动创作也按这个提醒）", range("overlapLimit", { min: 5, max: 90, step: 1, format: (v) => v + "%" })),
-        row("运行情况", statusBox, runBtn, { stack: true }));
+        h("p", { class: "card-desc" }, "到点自动：找爆款 → 跳过拆过的 → 拆解 → 写原创 → 推草稿箱。可以建多个任务，每个任务单独设时间、关键词、来源和目标平台；同一时间到点的会依次跑。只存草稿不发布；与原文重合度超过上限的不推送，并标记「需改写」。应用需要开着才会运行（电脑睡眠错过的时段，醒来 15 分钟内会补跑）。"),
+        listBox, h("div", { class: "actions" }, addBtn),
+        row("重合度上限", "所有任务共用：与原文重合度超过这个值就不推送、标记「需改写」（手动创作也按这个提醒）", range("overlapLimit", { min: 5, max: 90, step: 1, format: (v) => v + "%" })),
+        row("最近运行", historyBox, null, { stack: true }));
 
+      function save(now) {
+        clearTimeout(saveTimer);
+        const go = async () => { try { jobs = await C.call(api.auto.saveJobs(jobs)); drawStatus(); } catch (e) { C.err(e); } };
+        if (now) go(); else saveTimer = setTimeout(go, 400);
+      }
+      function addJob() {
+        const n = jobs.length + 1;
+        if (n > 20) { window.Shell.toast("最多 20 个定时任务", "info"); return; }
+        jobs.push({ id: "job" + Date.now().toString(36), name: `任务 ${n}`, enabled: false, times: "08:30", weekdays: "1,2,3,4,5,6,7", keywords: "", source: "wechat", days: 3, count: 2, targets: "wechat", push: false, images: false });
+        save(true); draw();
+      }
+      async function removeJob(j) {
+        if (!(await window.Shell.confirm(`删除定时任务「${j.name}」？`, { okText: "删除", danger: true }))) return;
+        jobs = jobs.filter((x) => x.id !== j.id); save(true); draw();
+      }
+      async function runJob(j, btn) {
+        btn.disabled = true;
+        try {
+          clearTimeout(saveTimer); jobs = await C.call(api.auto.saveJobs(jobs));
+          const r = await C.call(api.auto.runNow(j.id));
+          if (r && r.busy) window.Shell.toast(r.error, "info");
+          else if (r && r.task) window.Shell.toast(`「${j.name}」已开始，进度在运行日志里`, "success");
+        } catch (e) { C.err(e); } finally { setTimeout(drawStatus, 300); }
+      }
+
+      function jobCard(j) {
+        const set = (k, v, now) => { j[k] = v; save(now); };
+        const inp = (k, attrs = {}) => { const el = h(attrs.multiline ? "textarea" : "input", { class: "input", placeholder: attrs.placeholder || "", rows: attrs.multiline ? 2 : undefined }); el.value = j[k] || ""; el.addEventListener("input", () => set(k, el.value)); return el; };
+        const sel = (k, opts, parse = String) => { const el = h("select", { class: "input" }, ...opts.map(([v, l]) => h("option", { value: v, selected: String(j[k]) === String(v) }, l))); el.addEventListener("change", () => set(k, parse(el.value), true)); return el; };
+        const checks = (k, opts) => {
+          const cur = new Set(String(j[k] || "").split(/[,，\s]+/).filter(Boolean));
+          const wrap = h("div", { class: "check-row" });
+          wrap.append(...opts.map(([v, l]) => h("label", { class: "check" }, h("input", { type: "checkbox", value: v, checked: cur.has(String(v)), onchange: () => set(k, [...wrap.querySelectorAll("input:checked")].map((i) => i.value).join(","), true) }), l)));
+          return wrap;
+        };
+        const sw = (k, onChange) => h("label", { class: "switch" }, h("input", { type: "checkbox", checked: !!j[k], onchange: (e) => { set(k, e.target.checked, true); if (onChange) onChange(); } }), h("span", { class: "slider" }));
+        const timesHint = h("span", { class: "muted small-text" });
+        const timesIn = inp("times", { placeholder: "例如 08:30, 20:00（可以多个，逗号隔开）" });
+        const drawHint = () => { const ok = validTimes(timesIn.value); timesHint.textContent = ok.length ? `每天 ${ok.length} 次` : "还没有有效的时间"; };
+        timesIn.addEventListener("input", drawHint); drawHint();
+        const nextLine = h("span", { class: "muted small-text job-next", "data-job": j.id });
+        const runBtn = h("button", { class: "btn small", onclick: () => runJob(j, runBtn) }, "立即运行一次");
+        const nameIn = inp("name", { placeholder: "任务名" }); nameIn.classList.add("job-name");
+        const field = (label, el, hint) => h("div", { class: "job-field" }, h("div", { class: "job-label" }, label, hint ? h("span", { class: "muted small-text" }, "　", hint) : null), el);
+        return h("div", { class: "auto-job" + (j.enabled ? " on" : ""), "data-job": j.id },
+          h("div", { class: "job-head" }, sw("enabled", () => draw()), nameIn, nextLine, h("span", { class: "spacer" }), runBtn,
+            h("button", { class: "btn small ghost danger", onclick: () => removeJob(j) }, "删除")),
+          h("div", { class: "job-grid" },
+            field("时间", timesIn, timesHint),
+            field("星期", checks("weekdays", WD), "不勾 = 每天"),
+            field("关键词（可不填）", inp("keywords", { placeholder: "不填 = 按今日热点（头条热榜 + 百度热搜）挑最火的；例如：AI 工具, 职场效率" })),
+            field("去哪找爆款", sel("source", SRC)),
+            field("只看近几天", sel("days", DAYS, Number)),
+            field("每次几篇", sel("count", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => [n, n + " 篇"]), Number)),
+            field("写成哪些平台", checks("targets", Object.entries(C.PLATFORM_NAMES)), "第一个按骨架写原创，其余在它基础上改写"),
+            field("生成配图", sw("images"), "按 设置 → 配图 生成封面和文中配图"),
+            field("自动推草稿箱", sw("push"), "用绑定当前运营账号的平台号")));
+      }
+      function draw() {
+        listBox.replaceChildren(...(jobs.length ? jobs.map(jobCard) : [h("div", { class: "empty" }, h("p", { class: "muted" }, "还没有定时任务。点「新建定时任务」开始。"))]));
+        drawNext();
+      }
+      function drawNext() {
+        if (!status) return;
+        for (const el of listBox.querySelectorAll(".job-next")) {
+          const st = status.jobs.find((x) => x.id === el.dataset.job);
+          if (!st) { el.textContent = ""; continue; }
+          el.textContent = st.running ? "● 运行中" : st.enabled ? (st.next ? `下次 ${fmtNext(st.next)}` : "已开启，但没有有效的时间") : "未开启";
+        }
+      }
       async function drawStatus() {
         try {
-          const a = await C.call(api.auto.status());
-          runBtn.disabled = a.running;
-          runBtn.textContent = a.running ? "运行中…" : "立即运行一次";
-          const next = a.enabled && a.next ? new Date(a.next) : null;
-          statusBox.replaceChildren(
-            h("div", {}, a.enabled ? (next ? `下次运行：${next.getMonth() + 1}月${next.getDate()}日 ${String(next.getHours()).padStart(2, "0")}:${String(next.getMinutes()).padStart(2, "0")}` : "已开启，但没有有效的时间") : "未开启（「立即运行一次」不受开关影响）"),
-            a.runs.length ? h("details", { class: "auto-runs" }, h("summary", {}, `最近运行（${a.runs.length}）`), ...a.runs.map((r) => h("div", { class: "auto-run" },
-              h("span", { class: "muted" }, C.fmtDate(r.startedAt)), " ",
-              h("span", { class: "chip static" }, r.trigger === "schedule" ? "定时" : r.trigger === "batch" ? "批量" : "手动"), " ",
-              h("span", { class: r.status === "failed" ? "error-text" : "" }, r.status === "running" ? "运行中…" : r.summary || r.status)))) : h("div", { class: "muted small-text" }, "还没运行过"));
-        } catch (e) { statusBox.replaceChildren(h("span", { class: "error-text" }, e.message)); }
+          status = await C.call(api.auto.status());
+          drawNext();
+          historyBox.replaceChildren(status.runs.length ? h("div", {}, ...status.runs.map((r) => h("div", { class: "auto-run" },
+            h("span", { class: "muted" }, C.fmtDate(r.startedAt)), " ",
+            h("span", { class: "chip static" }, r.trigger === "schedule" ? "定时" : r.trigger === "batch" ? "批量" : "手动"), " ",
+            r.jobName ? h("b", {}, r.jobName + "　") : null,
+            h("span", { class: r.status === "failed" ? "error-text" : "" }, r.status === "running" ? "运行中…" : r.summary || r.status)))) : h("div", { class: "muted small-text" }, "还没运行过"));
+        } catch (e) { historyBox.replaceChildren(h("span", { class: "error-text" }, e.message)); }
       }
-      async function runNow() {
-        runBtn.disabled = true;
-        try { const r = await C.call(api.auto.runNow()); if (r && r.task) window.Shell.toast("已开始，进度在运行日志里", "success"); }
-        catch (e) { C.err(e); } finally { setTimeout(drawStatus, 300); }
+      async function load() {
+        try { jobs = await C.call(api.auto.jobs()); } catch (e) { C.err(e); }
+        draw(); drawStatus();
       }
       C.onData((what) => { if (what === "auto") drawStatus(); });
-      api.tasks.onChange((t) => { if (t.type === "auto:run" && ["done", "failed", "cancelled"].includes(t.status)) drawStatus(); });
-      drawStatus();
+      api.tasks.onChange((t) => { if (t.type === "auto:run" && ["done", "failed", "cancelled", "running"].includes(t.status)) drawStatus(); });
+      load();
     },
   });
 
@@ -252,9 +340,11 @@
   window.Shell.registerSettingsSection({
     id: "rules", title: "各平台写作规范", icon: "pen", order: 5,
     render(box) {
-      const { row, select } = window.Shell.settingsUI;
+      const { row, select, toggle } = window.Shell.settingsUI;
       box.append(h("p", { class: "card-desc" }, "内置了每个平台的写法规范；这里可以补充你自己的要求（例如固定结尾、字数、必带话题），写稿和生成平台版本时会优先遵守。"),
-        row("默认平台", "写稿页默认选中的平台", select("defaultPlatform", Object.entries(C.PLATFORM_NAMES))));
+        row("默认平台", "写稿页默认选中的平台", select("defaultPlatform", Object.entries(C.PLATFORM_NAMES))),
+        row("运用拆解出的写法", "写稿时从拆解库里按选题自动挑几条可复用写法 / 开头 / 标题公式让 AI 用上（创作页里也能手动勾选）；定时和批量创作同样适用", toggle("useTechniques")),
+        row("每篇挑几条", "", select("techniqueCount", [[2, "2 条"], [3, "3 条"], [4, "4 条"], [5, "5 条"], [6, "6 条"]], { parse: Number })));
       C.meta().then((m) => {
         for (const p of m.platforms) {
           box.append(row(p.name, h("details", { class: "rule-details" }, h("summary", {}, "查看内置规范"), h("div", { class: "muted small-text" }, ...(p.guide || []).map((g) => h("p", {}, g)))),

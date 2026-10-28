@@ -34,7 +34,7 @@
       // ================= 找爆款 =================
       let sources = [];
       const pfSel = h("select", { class: "input" });
-      const kwIn = h("input", { class: "input grow", placeholder: "关键词，例如：AI 工具、职场沟通、育儿" });
+      const kwIn = h("input", { class: "input grow", placeholder: "关键词（可不填：不填就按今日热点挑最火的）" });
       const daysSel = C.selectEl(DAYS, String(s.discoverDays ?? 3));
       const searchBtn = h("button", { class: "btn primary", onclick: search }, "找爆款");
       const stopBtn = h("button", { class: "btn", hidden: true }, "停止");
@@ -47,6 +47,7 @@
       const targetBox = h("div", { class: "check-row" }, ...Object.entries(C.PLATFORM_NAMES).map(([id, name]) =>
         h("label", { class: "check" }, h("input", { type: "checkbox", value: id, checked: id === (s.defaultPlatform || "wechat") }), name)));
       const pushChk = h("input", { type: "checkbox" });
+      const imgChk = h("input", { type: "checkbox" });
       const batchBtn = h("button", { class: "btn small primary", disabled: true, onclick: () => batch(true) }, "拆解并创作");
       const onlyBtn = h("button", { class: "btn small", disabled: true, onclick: () => batch(false) }, "只拆解");
       const batchStatus = h("div", { class: "batch-status muted small-text" });
@@ -66,6 +67,7 @@
           h("div", { class: "lib-head batch-bar" }, h("label", { class: "check" }, allBox, "全选"),
             h("span", { class: "muted small-text" }, "写成："), targetBox,
             h("label", { class: "check", title: "写好后直接推送到对应平台的草稿箱（只存草稿，不发布；重合度过高的不推送）" }, pushChk, "直接推进草稿箱"),
+            h("label", { class: "check", title: "按 设置 → 配图 生成封面和文中配图，推草稿箱时一起填进去" }, imgChk, "生成配图"),
             h("span", { class: "spacer" }), onlyBtn, batchBtn),
           batchStatus, resultList));
 
@@ -94,17 +96,16 @@
 
       async function search() {
         const keyword = kwIn.value.trim();
-        if (!keyword) { window.Shell.toast("先输入关键词", "info"); kwIn.focus(); return; }
-        searchBtn.disabled = true; stopBtn.hidden = false; findStatus.textContent = "正在打开搜索页…";
+        searchBtn.disabled = true; stopBtn.hidden = false; findStatus.textContent = keyword ? "正在打开搜索页…" : "没填关键词：按今日热点找最火的…";
         resultList.replaceChildren(h("div", { class: "progress" }, h("div", { class: "bar indeterminate" })));
         picked.clear(); drawBatch();
         try {
           const r = await C.runAi("discover:search", { platform: pfSel.value, keyword, days: Number(daysSel.value) }, {
-            title: `找爆款：${C.SOURCE_NAMES[pfSel.value]}「${keyword}」`,
+            title: `找爆款：${C.SOURCE_NAMES[pfSel.value]}「${keyword || "今日热点"}」`,
             onTask: (t) => { searchTask = t.id; if (t.message) findStatus.textContent = t.message; },
           });
           if (!r) { findStatus.textContent = "已停止"; resultList.replaceChildren(); return; }
-          results = r.items.map((x) => ({ ...x, keyword }));
+          results = r.items.map((x) => ({ ...x, keyword: keyword || x.keyword || "" }));
           findStatus.textContent = "";
           drawResults(r);
         } catch (e) {
@@ -115,8 +116,9 @@
       function drawResults(r) {
         const dayText = DAYS.find((d) => d[0] === daysSel.value)[1];
         resultHead.replaceChildren(h("b", {}, `${dayText}找到 ${r.total} 篇`), h("span", { class: "muted small-text" }, r.hidden ? `，已隐藏 ${r.hidden} 篇拆过的` : ""),
+          r.hotTopics && r.hotTopics.length ? h("span", { class: "muted small-text" }, `（按今日热点：${r.hotTopics.join("、")}）`) : null,
           h("span", { class: "spacer" }), h("span", { class: "muted small-text" }, results.some((x) => x.likes) ? "按点赞从高到低" : "有热度的排在前面"));
-        resultList.replaceChildren(...(results.length ? results.map(resultRow) : [h("div", { class: "empty" }, h("p", { class: "muted" }, r.total ? "都拆过了，换个关键词或放宽时间试试" : "没有找到，换个关键词或放宽时间试试"))]));
+        resultList.replaceChildren(...(results.length ? results.map(resultRow) : [h("div", { class: "empty" }, h("p", { class: "muted" }, r.total ? "都拆过了，换个关键词或放宽时间试试" : r.hotTopics ? "今日热点在这个平台没搜到近期文章，填个关键词或放宽时间试试" : "没有找到，换个关键词或放宽时间试试"))]));
         drawBatch();
       }
       function resultRow(x) {
@@ -163,7 +165,7 @@
         try {
           let r;
           if (write) {
-            r = await C.runAi("discover:batch", { items, targets, push, platform: pfSel.value, keyword: kwIn.value.trim() }, {
+            r = await C.runAi("discover:batch", { items, targets, push, images: imgChk.checked, platform: pfSel.value, keyword: kwIn.value.trim() }, {
               title: `批量拆解并创作（${items.length} 篇）`, onTask: (t) => { if (t.message) batchStatus.textContent = t.message; } });
           } else {
             let ok = 0, dup = 0;

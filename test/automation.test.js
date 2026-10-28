@@ -13,6 +13,7 @@ const SOURCE_A = "很多人以为副业就是多打一份工。其实真正赚�
 const SOURCE_C = "抄袭测试原文：早上六点起床的人到底赢在哪里？答案可能出乎你的意料，并不是时间更多，而是干扰更少。安静的两小时足够完成一天最重要的事情。".repeat(3);
 const ANALYSIS = JSON.stringify({ titleFormula: "反常识 + 结论", hook: "先否定常见看法", skeleton: ["否定误区", "给出方法", "举例", "总结"], emotions: ["焦虑"], highlights: ["月入八千"], reusable: ["先破后立"], avoid: ["财务朋友的案例"], topics: [{ title: "同结构选题一", angle: "a" }, { title: "同结构选题二" }, { title: "同结构选题三" }] });
 
+const searchCalls = [];
 function setup({ searchItems = [] } = {}) {
   const dir = tmp();
   const store = createStore(path.join(dir, "data"));
@@ -33,7 +34,7 @@ function setup({ searchItems = [] } = {}) {
   };
   const discover = {
     read: async (url) => ({ url, canonicalUrl: url, title: url.includes("/article/c") ? "早上六点起床的人赢在哪" : "副业的真相", body: url.includes("/article/c") ? SOURCE_C : SOURCE_A, author: "作者", publishedAt: 0, platform: "toutiao" }),
-    search: async () => ({ items: searchItems.slice(), hidden: 0, total: searchItems.length }),
+    search: async (q) => { searchCalls.push(q); return { items: searchItems.slice(), hidden: 0, total: searchItems.length }; },
   };
   const publisher = { push: async (id) => { pushed.push(id); return { status: "saved" }; } };
   const content = { ai: { chat }, brand: () => ({}), rules: () => ({}), currentAccount: () => "acc1", secrets: { get: () => "sk-test" } };
@@ -93,24 +94,65 @@ test("自动创作一轮：按关键词找爆款、跳过拆过的、凑够篇�
     { title: "早上六点起床的人赢在哪", url: "https://www.toutiao.com/article/c22222222222/", platform: "toutiao" },
   ];
   const { settings, auto, pushed, store } = setup({ searchItems: items });
-  settings.set({ autoKeywords: "副业, 早起", autoCount: 1, autoTargets: "wechat", autoPush: false, autoSource: "toutiao" });
-  const r = await auto.autoRun("manual", ctx());
+  auto.saveJobs([{ id: "a", name: "副业", keywords: "副业, 早起", count: 1, targets: "wechat", push: false, source: "toutiao" }]);
+  const r = await auto.autoRun("manual", ctx(), "a");
   assert.equal(r.found, 1);
   assert.equal(r.written, 1);
   assert.equal(pushed.length, 0);
   assert.equal(store.contents.list()[0].auto, true);
   assert.equal(store.contents.list()[0].status, "draft");
-  // 第二轮：第一篇拆过了，自动换下一篇（搜索结果里拆过的由 discover 过滤，这里模拟它被去重）
-  settings.set({ autoKeywords: "" });
-  await assert.rejects(auto.autoRun("manual", ctx()), /关键词/);
+  // 不设关键词：用空关键词搜（discover 会按今日热点挑最火的），照样能跑
+  searchCalls.length = 0;
+  auto.saveJobs([{ id: "a", name: "热点", keywords: "", count: 1, targets: "wechat", source: "toutiao" }]);
+  const r2 = await auto.autoRun("manual", ctx(), "a");
+  assert.equal(searchCalls.length, 1);
+  assert.equal(searchCalls[0].keyword, "");
+  assert.equal(r2.found, 1);
 });
 
-test("状态：下次运行时间、最近一次运行", async () => {
+test("定时任务：旧的单个配置迁移成任务 1；可以建多个，各自算下次运行", async () => {
   const { settings, auto } = setup();
-  assert.equal(auto.status().next, 0);
-  settings.set({ autoEnabled: true, autoTimes: "08:30" });
+  settings.set({ autoEnabled: true, autoTimes: "08:30", autoKeywords: "AI 工具", autoSource: "toutiao", autoTargets: "wechat,toutiao" });
+  const list = auto.jobs();
+  assert.equal(list.length, 1);
+  assert.equal(list[0].name, "任务 1");
+  assert.equal(list[0].enabled, true);
+  assert.equal(list[0].keywords, "AI 工具");
+  assert.equal(list[0].source, "toutiao");
+  // 迁移只做一次：之后改旧字段不影响
+  settings.set({ autoKeywords: "别的" });
+  assert.equal(auto.jobs()[0].keywords, "AI 工具");
+  // 两个任务：一个开、一个关；状态里各自有下次运行时间，总的下次运行取最早
+  auto.saveJobs([
+    { id: "a", name: "早上", enabled: true, times: "08:30", keywords: "副业" },
+    { id: "b", name: "晚上", enabled: true, times: "20:00", keywords: "" },
+    { id: "c", name: "关掉的", enabled: false, times: "12:00" },
+    { id: "a", name: "重复 id 会被丢掉" },
+  ]);
   const st = auto.status();
-  assert.ok(st.next > Date.now());
-  assert.deepEqual(st.times, ["08:30"]);
+  assert.equal(st.jobs.length, 3);
+  assert.equal(st.enabledCount, 2);
+  assert.ok(st.jobs[0].next > Date.now() && st.jobs[1].next > Date.now());
+  assert.equal(st.jobs[2].next, 0);
+  assert.equal(st.next, Math.min(st.jobs[0].next, st.jobs[1].next));
+  assert.deepEqual(st.jobs[1].keywordList, []);
   assert.equal(st.lastRun, null);
+  // 字段校验
+  const bad = auto.saveJobs([{ id: "x<>", name: "", source: "nope", days: 99, count: 0, times: 5 }])[0];
+  assert.equal(bad.id, "x"); assert.equal(bad.name, "任务 1"); assert.equal(bad.source, "wechat"); assert.equal(bad.days, 30); assert.equal(bad.count, 1);
+});
+
+test("定时任务：同一时间到点的两个任务依次各跑一次，不重复触发", async () => {
+  const items = [{ title: "副业的真相", url: "https://www.toutiao.com/article/111111111111/", platform: "toutiao" }];
+  const { auto, store } = setup({ searchItems: items });
+  const d = new Date(); const hhmm = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  auto.saveJobs([
+    { id: "a", name: "甲", enabled: true, times: hhmm, keywords: "副业", targets: "wechat", count: 1 },
+    { id: "b", name: "乙", enabled: true, times: hhmm, keywords: "", targets: "wechat", count: 1 },
+  ]);
+  const fired = await auto.scheduler.tick(Date.now());
+  assert.deepEqual(fired, ["a", "b"]);
+  assert.deepEqual(await auto.scheduler.tick(Date.now()), []); // 同一时段不再触发
+  const names = store.autoRuns.list().map((r) => r.jobName).sort();
+  assert.deepEqual(names, ["乙", "甲"]);
 });

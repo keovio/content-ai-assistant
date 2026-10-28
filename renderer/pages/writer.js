@@ -25,6 +25,29 @@
       const styleIn = h("input", { class: "input", placeholder: "可选：例如 多讲案例、少用形容词、带点幽默" });
       const outlineIn = h("textarea", { class: "input", rows: 5, placeholder: "可选：大纲 / 必须写到的要点，一行一个" });
       const matBox = h("div", { class: "mat-pick" });
+      // 写法库：拆解出来的可复用写法 / 开头 / 标题公式。不勾 = 按选题自动挑；勾了就只用勾的
+      const techHint = h("span", { class: "muted small-text" });
+      const techList = h("div", { class: "mat-pick tech-pick" });
+      const techBox = h("details", { class: "tech-box" }, h("summary", {}, techHint), techList);
+      let techAuto = [];
+      const techChecked = () => [...techList.querySelectorAll("input:checked")].map((i) => i.value);
+      function techSummary() {
+        const n = techChecked().length;
+        const total = techList.querySelectorAll("input").length;
+        techHint.textContent = !total ? "写法库还是空的：先在「对标拆解」拆几篇爆款" : n ? `已选 ${n} 条写法（只用选中的）` : techAuto.length ? `自动：按选题挑 ${techAuto.length} 条（点开可以自己选）` : "不运用写法（设置里关了自动挑选；点开可以手动选）";
+      }
+      async function loadTechniques() {
+        try {
+          const keep = new Set(techChecked());
+          const r = await C.call(api.techniques.list(topicIn.value.trim()));
+          techAuto = r.auto || [];
+          const auto = new Set(techAuto);
+          techList.replaceChildren(...r.list.map((x) => h("label", { class: "check mat-item" + (auto.has(x.id) ? " auto" : ""), title: `来自《${x.from}》` },
+            h("input", { type: "checkbox", value: x.id, checked: keep.has(x.id), onchange: techSummary }),
+            h("span", { class: "tag" }, x.kind), x.text.length > 60 ? x.text.slice(0, 60) + "…" : x.text, auto.has(x.id) ? h("span", { class: "muted small-text" }, " · 自动") : "")));
+          techSummary();
+        } catch (e) { techHint.textContent = e.message; }
+      }
       const genBtn = h("button", { class: "btn primary", onclick: generate }, "生成初稿");
       const stopBtn = h("button", { class: "btn", hidden: true }, "停止");
       const genStatus = h("span", { class: "muted small-text" });
@@ -44,6 +67,8 @@
       const paSel = C.accountPicker(s.defaultPlatform || "wechat", "", { onChange: (v) => { current.platformAccountId = v; markDirty(); } });
       const draftsBtn = h("button", { class: "btn small ghost", hidden: true, onclick: () => current.id && C.call(api.publish.openFor(current.id)).catch(C.err) }, "打开草稿箱");
       const titleBox = h("div", { class: "title-suggest", hidden: true });
+      const imgStrip = h("div", { class: "img-strip", hidden: true });
+      const imgBtn = h("button", { class: "btn small", title: "按 设置 → 配图 生成封面和文中配图（可以边写边配）", onclick: () => makeImages() }, "AI 配图");
       let undoBody = null;
       const undoBtn = h("button", { class: "btn small ghost", hidden: true, onclick: () => {
         if (undoBody === null) return;
@@ -74,7 +99,7 @@
           h("div", {}, h("h1", {}, "创作"), h("p", { class: "sub" }, "设定方向或套用爆款骨架让 AI 出初稿，改到满意后生成各平台版本、推送草稿箱")),
           h("div", { class: "actions" }, h("button", { class: "btn", onclick: () => confirmLeave().then((ok) => ok && load({ fresh: true })) }, "新建"))),
         h("div", { class: "writer-grid" },
-          card({ title: "写作设定", icon: "spark" },
+          h("div", { class: "writer-side" }, card({ title: "写作设定", icon: "spark" },
             h("div", { class: "form" },
               refBox,
               C.field("选题", topicIn),
@@ -82,12 +107,15 @@
               C.field("风格要求", styleIn),
               C.field("大纲 / 要点", outlineIn),
               C.field("参考素材", matBox, "勾选的素材会交给 AI 参考"),
+              C.field("运用写法", techBox, "从拆解库汇总的写法，写稿时让 AI 自然用上"),
               h("div", { class: "actions" }, genBtn, stopBtn, genStatus))),
+            // 平台版本放在写作设定下面
+            versionsCard()),
           card({ title: "编辑器", icon: "note", class: "editor-card", actions: [savedInfo] },
-            ovBox, titleIn, titleBox, bodyIn,
+            ovBox, titleIn, titleBox, bodyIn, imgStrip,
             h("div", { class: "editor-bar" },
               wc, h("span", { class: "spacer" }),
-              h("button", { class: "btn small", onclick: suggestTitles }, "AI 取标题"),
+              h("button", { class: "btn small", onclick: suggestTitles }, "AI 取标题"), imgBtn,
               undoBtn, polishSel, h("button", { class: "btn small", title: "选中一段只处理选中的，不选就处理全文", onclick: polish }, "处理")),
             h("div", { class: "editor-bar push-bar" }, pushInfo, h("span", { class: "spacer" }), paSel, draftsBtn, pushBtn),
             h("div", { class: "editor-bar" },
@@ -95,8 +123,7 @@
               h("button", { class: "btn small", onclick: () => C.copy((titleIn.value ? titleIn.value + "\n\n" : "") + bodyIn.value, "全文") }, "复制"),
               h("button", { class: "btn small", onclick: exportMd }, "导出"),
               h("button", { class: "btn small danger-ghost", onclick: del }, "删除"),
-              h("button", { class: "btn small primary", onclick: () => save() }, "保存")))),
-        versionsCard());
+              h("button", { class: "btn small primary", onclick: () => save() }, "保存")))));
 
       async function loadMaterials(selected = []) {
         try {
@@ -110,6 +137,8 @@
       }
 
       function fill(c) {
+        if (genSession && taskId) { genStatus.textContent = "上一篇还在后台写，写完自动存成草稿"; taskId = null; stopBtn.hidden = true; }
+        genSession++; pinnedTitle = "";
         current = { id: c.id || "", sourceId: c.sourceId || "", refId: c.refId || "", groupId: c.groupId || "", platformAccountId: c.platformAccountId || "" };
         titleIn.value = c.title || "";
         bodyIn.value = c.body || "";
@@ -124,6 +153,8 @@
         updateWc();
         drawPush(c);
         paSel.redraw(pfSel.value, current.platformAccountId);
+        current.cover = c.cover || "";
+        drawImages();
         loadRef(current.refId).then(() => drawOverlap(c.id ? { overlap: c.overlap, needsRewrite: c.needsRewrite } : null));
         drawVersions();
       }
@@ -223,38 +254,99 @@
         return window.Shell.confirm("当前内容还没保存，确定丢掉吗？", { okText: "丢掉", danger: true });
       }
 
+      // 写稿在后台跑，写完主进程直接存成草稿：生成时可以点「新建」去写下一篇、同时取标题、生成平台版本…
+      let genSession = 0, genRunning = 0, pinnedTitle = "";
       async function generate() {
         if (!topicIn.value.trim() && !outlineIn.value.trim() && !ref) { window.Shell.toast("先写个选题或大纲", "info"); topicIn.focus(); return; }
-        if ((titleIn.value || bodyIn.value) && !(await window.Shell.confirm("生成的初稿会替换编辑器里现在的内容，继续吗？"))) return;
-        genBtn.disabled = true; stopBtn.hidden = false; genStatus.textContent = "正在连接 AI…";
+        if ((titleIn.value || bodyIn.value) && !(await window.Shell.confirm("生成的初稿会替换编辑器里现在的内容，继续吗？（想同时写另一篇，先点「新建」）"))) return;
+        const mine = ++genSession;
+        const topic = topicIn.value.trim();
+        const reuseId = current.id && !current.groupId ? current.id : "";
+        genRunning++; stopBtn.hidden = false; genStatus.textContent = "正在连接 AI…";
         const before = { title: titleIn.value, body: bodyIn.value };
         bodyIn.value = ""; titleIn.value = "";
+        const here = () => mine === genSession; // 编辑器还停在这一篇
+        let myTask = null;
         try {
           const r = await C.runAi("ai:draft", {
-            topic: topicIn.value.trim(), platform: pfSel.value, words: Number(wordsSel.value), style: styleIn.value.trim(), outline: outlineIn.value.trim(),
+            topic, platform: pfSel.value, words: Number(wordsSel.value), style: styleIn.value.trim(), outline: outlineIn.value.trim(),
             materialIds: [...matBox.querySelectorAll("input:checked")].map((i) => i.value), refId: ref ? ref.id : "",
+            save: true, contentId: reuseId, techniqueIds: techChecked(),
           }, {
-            onTask: (t) => { taskId = t.id; if (t.message) genStatus.textContent = t.message; },
-            onText: (text) => { const st = C.splitTitle(text); titleIn.value = st.title; bodyIn.value = st.body; bodyIn.scrollTop = bodyIn.scrollHeight; updateWc(); },
+            title: `写稿：${(topic || (ref && ref.title) || "未命名").slice(0, 24)}`,
+            onTask: (t) => { myTask = t.id; if (here()) { taskId = t.id; if (t.message) genStatus.textContent = t.message; } },
+            onText: (text) => { if (!here()) return; const st = C.splitTitle(text); titleIn.value = pinnedTitle || st.title; bodyIn.value = st.body; bodyIn.scrollTop = bodyIn.scrollHeight; updateWc(); },
           });
-          if (!r) { genStatus.textContent = "已停止"; if (!bodyIn.value) { titleIn.value = before.title; bodyIn.value = before.body; } }
-          else { titleIn.value = r.title; bodyIn.value = r.body; genStatus.textContent = `完成，${C.countWords(r.body)} 字`; }
-          updateWc(); markDirty(); checkOverlap();
+          if (!here()) {
+            if (r && r.contentId) window.Shell.toast(`「${r.title || topic}」写好了，已存为草稿（发布页可以找到）`, "success", 5000);
+            return;
+          }
+          if (!r) { genStatus.textContent = "已停止"; if (!bodyIn.value) { titleIn.value = before.title; bodyIn.value = before.body; } updateWc(); return; }
+          titleIn.value = pinnedTitle || r.title; bodyIn.value = r.body;
+          genStatus.textContent = `完成，${C.countWords(r.body)} 字，已存为草稿`;
+          if (r.contentId) {
+            const saved = await C.call(api.store.get("contents", r.contentId)).catch(() => null);
+            if (saved && here()) { current.id = saved.id; dirty = false; savedInfo.textContent = `已保存 · ${C.fmtDate(saved.updatedAt)}`; drawOverlap(saved.refId ? { overlap: saved.overlap, needsRewrite: saved.needsRewrite } : null); drawVersions(); drawPush(saved); }
+            if (pinnedTitle && here() && pinnedTitle !== r.title) await save({ quiet: true }); // 生成途中选好的标题
+          } else markDirty();
+          updateWc(); checkOverlap();
         } catch (e) {
-          genStatus.textContent = "";
-          if (!bodyIn.value) { titleIn.value = before.title; bodyIn.value = before.body; }
+          if (here()) { genStatus.textContent = ""; if (!bodyIn.value) { titleIn.value = before.title; bodyIn.value = before.body; } }
           C.err(e);
-        } finally { genBtn.disabled = false; stopBtn.hidden = true; taskId = null; }
+        } finally {
+          genRunning--;
+          if (here()) { stopBtn.hidden = true; taskId = null; }
+          void myTask;
+        }
+      }
+
+      // ---------- 配图 ----------
+      const IMG_RE = /^\s*!\[([^\]]*)\]\(cai-img:([\w.-]+)\)\s*$/;
+      const thumbCache = new Map();
+      async function thumb(name) {
+        if (!thumbCache.has(name)) thumbCache.set(name, C.call(api.images.dataUrl(name)).catch(() => ""));
+        return thumbCache.get(name);
+      }
+      async function drawImages() {
+        const list = bodyIn.value.split("\n").map((l) => l.match(IMG_RE)).filter(Boolean).map((m) => ({ alt: m[1], name: m[2] }));
+        const all = (current.cover ? [{ alt: "封面", name: current.cover, cover: true }] : []).concat(list);
+        imgStrip.hidden = !all.length;
+        if (!all.length) { imgStrip.replaceChildren(); return; }
+        const tiles = await Promise.all(all.map(async (x) => {
+          const src = await thumb(x.name);
+          return h("figure", { class: "img-tile" + (x.cover ? " cover" : ""), title: x.alt },
+            src ? h("img", { src, alt: x.alt }) : h("div", { class: "img-missing" }, "图片不见了"),
+            h("figcaption", {}, x.cover ? "封面" : x.alt || "配图"));
+        }));
+        imgStrip.replaceChildren(h("span", { class: "muted small-text" }, `配图 ${list.length} 张${current.cover ? " + 封面" : ""}（正文里的 ![…](cai-img:…) 行就是图片位置，可以挪动或删掉）`), h("div", { class: "img-row" }, ...tiles));
+      }
+      bodyIn.addEventListener("input", window.Shell.debounce(drawImages, 600));
+      async function makeImages() {
+        if (!bodyIn.value.trim()) { window.Shell.toast("先有正文才能配图", "info"); return; }
+        const item = await save({ quiet: true });
+        if (!item) return;
+        const id = item.id, title = item.title;
+        imgBtn.disabled = true; imgBtn.textContent = "配图中…";
+        try {
+          const r = await C.runAi("ai:images", { contentId: id }, { title: `配图：${title.slice(0, 20)}` });
+          if (!r) return;
+          if (current.id === id) {
+            const c = await C.call(api.store.get("contents", id));
+            if (c && !dirty) { bodyIn.value = c.body; current.cover = c.cover || ""; updateWc(); drawImages(); }
+            else if (c) { current.cover = c.cover || ""; window.Shell.toast("配图已插进保存的稿子；你刚改过正文，重新打开这篇就能看到图", "info", 6000); }
+          }
+          window.Shell.toast(r.count || r.cover ? `「${title}」配好了 ${r.count} 张图${r.cover ? " + 封面" : ""}` : "AI 判断这篇不需要配图", "success", 4000);
+        } catch (e) { C.err(e); } finally { imgBtn.disabled = false; imgBtn.textContent = "AI 配图"; }
       }
 
       async function suggestTitles() {
-        if (!bodyIn.value.trim()) { window.Shell.toast("先有正文才能取标题", "info"); return; }
+        if (!bodyIn.value.trim() && !topicIn.value.trim()) { window.Shell.toast("先写个选题或正文", "info"); return; }
         titleBox.hidden = false;
         titleBox.replaceChildren(h("span", { class: "muted small-text" }, "AI 正在想标题…"));
         try {
-          const r = await C.runAi("ai:titles", { content: (titleIn.value ? titleIn.value + "\n" : "") + bodyIn.value, platform: pfSel.value });
+          const r = await C.runAi("ai:titles", { content: bodyIn.value.trim() ? (titleIn.value ? titleIn.value + "\n" : "") + bodyIn.value : `选题：${topicIn.value.trim()}\n${outlineIn.value.trim()}`, platform: pfSel.value });
           if (!r) { titleBox.hidden = true; return; }
-          titleBox.replaceChildren(...r.titles.map((t) => h("button", { class: "chip", onclick: () => { titleIn.value = t; markDirty(); titleBox.hidden = true; } }, t)),
+          titleBox.replaceChildren(...r.titles.map((t) => h("button", { class: "chip", onclick: () => { titleIn.value = t; if (genRunning && taskId) pinnedTitle = t; markDirty(); titleBox.hidden = true; } }, t)),
             h("button", { class: "btn small ghost", onclick: () => { titleBox.hidden = true; } }, "收起"));
         } catch (e) { titleBox.hidden = true; C.err(e); }
       }
@@ -283,7 +375,7 @@
           const item = await C.save("contents", {
             id: current.id || undefined, title: titleIn.value.trim() || "未命名", body: bodyIn.value, platform: pfSel.value,
             status: stSel.value, scheduledAt: dateIn.value, topic: topicIn.value.trim(), sourceId: current.sourceId || "",
-            refId: current.refId || "", groupId: current.groupId || "", platformAccountId: paSel.value || "",
+            refId: current.refId || "", groupId: current.groupId || "", platformAccountId: paSel.value || "", cover: current.cover || "",
           });
           current.id = item.id; dirty = false;
           savedInfo.textContent = `已保存 · ${C.fmtDate(item.updatedAt)}`;
@@ -306,8 +398,8 @@
 
       // ---------- 平台版本（原一稿多发） ----------
       function versionsCard() {
-        vCard = card({ title: "平台版本", icon: "share", id: "writer-versions", desc: "一篇写好后，一键改写成其他平台的版本；每个版本单独编辑、推送。",
-          actions: [h("button", { class: "btn small primary", onclick: () => { vGenBox.hidden = !vGenBox.hidden; drawGen(); } }, "＋ 生成其他平台版本")] },
+        vCard = card({ title: "平台版本", icon: "share", id: "writer-versions", desc: "写好后一键改写成其他平台版本，每个版本单独编辑、推送。",
+          actions: [h("button", { class: "btn small primary", onclick: () => { vGenBox.hidden = !vGenBox.hidden; drawGen(); } }, "＋ 生成")] },
         vGenBox, vTabs, vBody);
         return vCard;
       }
@@ -321,7 +413,7 @@
           C.platformName(c.platform), c.id === g ? "（主稿）" : "", c.needsRewrite ? " ⚠" : "")));
         vTabs.hidden = !vList.length;
         const v = vList.find((c) => c.id === vActive);
-        vBody.replaceChildren(v ? versionPanel(v) : h("p", { class: "muted" }, current.id ? "还没有其他平台版本。点右上角「生成其他平台版本」。" : "先写好并保存这篇，再生成其他平台版本。"));
+        vBody.replaceChildren(v ? versionPanel(v) : h("p", { class: "muted" }, current.id ? "还没有其他平台版本。点右上角「＋ 生成」。" : "先写好并保存这篇，再生成其他平台版本。"));
         if (!vGenBox.hidden) drawGen();
       }
       function drawGen() {
@@ -404,10 +496,13 @@
       this.loadMaterials = loadMaterials;
       C.onData((what) => {
         if (what === "materials") loadMaterials();
+        if (what === "breakdowns") loadTechniques();
         if (what === "platformAccounts" || what === "account") { paSel.redraw(pfSel.value); if (!vBody.querySelector("textarea:focus")) drawVersions(); }
         if (what === "contents" && current.id) api.store.get("contents", current.id).then((c) => { if (c && c.id === current.id) drawPush(c); }).catch(() => {});
       });
       loadMaterials();
+      loadTechniques();
+      topicIn.addEventListener("input", window.Shell.debounce(() => { if (!techChecked().length) loadTechniques(); }, 800));
     },
     async onShow() {
       const p = C.take("writer");

@@ -79,7 +79,21 @@
           try { await C.save("contents", { title: t.title, topic: [t.angle, t.hook].filter(Boolean).join("；"), platform: t.platform, status: "idea" }); window.Shell.toast("已加入内容列表（选题）", "success"); }
           catch (e) { C.err(e); }
         } }, "加入日历");
-        const actions = [write, toPlan];
+        // 后台写：不离开选题页，可以连点好几个同时写，写完自动存成草稿
+        let doneId = "";
+        const bg = h("button", { class: "btn small", title: "在后台写成草稿，可以同时写好几篇", onclick: async () => {
+          if (doneId) { C.open("writer", { id: doneId }); return; } // 写好了：点一下打开
+          bg.disabled = true; bg.textContent = "后台写作中…";
+          try {
+            const r = await C.runAi("ai:draft", { topic: t.title, platform: t.platform, outline: [t.angle && "切入角度：" + t.angle, t.hook && "开头钩子：" + t.hook].filter(Boolean).join("\n"), save: true },
+              { title: `写稿：${t.title.slice(0, 24)}` });
+            if (!r) { bg.disabled = false; bg.textContent = "后台写"; return; }
+            bg.textContent = "已写好 · 打开"; bg.disabled = false;
+            doneId = r.contentId;
+            window.Shell.toast(`「${r.title || t.title}」写好了，已存为草稿`, "success", 4000);
+          } catch (e) { bg.disabled = false; bg.textContent = "后台写"; C.err(e); }
+        } }, "后台写");
+        const actions = [write, bg, toPlan];
         if (saved) {
           actions.push(h("button", { class: "btn small danger-ghost", onclick: async () => { try { await C.remove("topics", t.id); } catch (e) { C.err(e); } } }, "删除"));
         } else {

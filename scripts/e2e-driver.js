@@ -61,6 +61,8 @@ async function run(win) {
   // ---- 2. AI 指向本地模拟接口 ----
   await js(`
     await window.app.ai.setKey("sk-e2e-test");
+    await window.app.images.setKey("img-e2e-test");
+    await window.app.settings.set({ imageProvider: "custom", imageBaseUrl: ${JSON.stringify(process.env.E2E_BASE + "/img")}, imageModel: "mock-image" });
     await window.app.settings.set({ aiProvider: "custom", aiBaseUrl: ${JSON.stringify(process.env.E2E_BASE + "/openai")}, aiModel: "mock-model", pushShowWindow: false, pushInterval: 3, defaultPlatform: "wechat" });
     window.Shell.saveSettings({ aiProvider: "custom", pushShowWindow: false, defaultPlatform: "wechat" });
     return true;`);
@@ -91,6 +93,7 @@ async function run(win) {
     const bar = root.querySelector(".batch-bar");
     for (const cb of bar.querySelectorAll(".check-row input")) cb.checked = ["wechat", "toutiao"].includes(cb.value);
     const push = [...bar.querySelectorAll("label.check")].find((l) => l.textContent.includes("草稿箱")).querySelector("input"); push.checked = true;
+    const pic = [...bar.querySelectorAll("label.check")].find((l) => l.textContent.includes("配图")).querySelector("input"); pic.checked = true;
     [...bar.querySelectorAll("button")].find((b) => b.textContent.startsWith("拆解并创作")).click();
     return true;`);
   await waitFor(`const b = document.querySelector(".modal .btn.primary"); if (b) { b.click(); return true; } return null;`, 5000, "确认框");
@@ -104,7 +107,7 @@ async function run(win) {
   await nav("publish");
   await sleep(800);
   await shot("发布-列表");
-  R.contents = await js(`return (await window.app.store.list("contents")).map((c) => ({ title: c.title, platform: c.platform, overlap: c.overlap, needsRewrite: c.needsRewrite, push: c.pushes[c.platform] ? c.pushes[c.platform].status : "", pushAccount: c.pushes[c.platform] ? c.pushes[c.platform].accountName : "", group: !!c.groupId, ref: !!c.refId }));`);
+  R.contents = await js(`return (await window.app.store.list("contents")).map((c) => ({ pics: (c.body.match(/cai-img:/g) || []).length, cover: !!c.cover, title: c.title, platform: c.platform, overlap: c.overlap, needsRewrite: c.needsRewrite, push: c.pushes[c.platform] ? c.pushes[c.platform].status : "", pushAccount: c.pushes[c.platform] ? c.pushes[c.platform].accountName : "", group: !!c.groupId, ref: !!c.refId }));`);
   await js(`document.querySelector("#page-publish [data-tab='calendar']").click(); return true;`);
   await shot("发布-日历");
 
@@ -115,6 +118,7 @@ async function run(win) {
   await sleep(1000);
   await shot("创作-需改写提醒");
   R.writer = await js(`return { overlap: document.querySelector("#page-writer .ov-num").textContent, warn: !!document.querySelector("#page-writer .ov-warn"), ref: document.querySelector("#page-writer .ref-title") ? document.querySelector("#page-writer .ref-title").textContent : "", versions: document.querySelectorAll("#writer-versions .v-tabs button").length, picker: [...document.querySelectorAll("#page-writer .push-bar .pa-picker option")].map((o) => o.textContent) };`);
+  R.tech = await js(`return { items: document.querySelectorAll("#page-writer .tech-pick input").length, hint: document.querySelector("#page-writer .tech-box summary").textContent };`);
   const goodId = await js(`const l = await window.app.store.list("contents"); const m = l.find((c) => !c.needsRewrite && c.platform === "wechat"); return m && m.id;`);
   if (goodId) {
     await js(`window.Content.open("writer", { id: ${JSON.stringify(goodId)} }); return true;`);
@@ -139,8 +143,12 @@ async function run(win) {
   // ---- 9. 设置：平台账号（多号、改名、绑定）+ 定时自动创作 ----
   const paId = R.migrated.length ? await js(`return (await window.app.publish.accounts())[0].id;`) : "";
   if (paId) await js(`await window.app.publish.update(${JSON.stringify(paId)}, { name: "主力头条号" }); return true;`);
-  await js(`await window.app.settings.set({ autoEnabled: true, autoTimes: "08:30, 20:00", autoKeywords: "AI 副业", autoSource: "toutiao", autoDays: 3, autoCount: 2, autoTargets: "toutiao", autoPush: true });
-    window.Shell.saveSettings({ autoEnabled: true }); return true;`);
+  // 多个定时任务：旧的单个配置先迁移成「任务 1」，再存两个任务（一个有关键词，一个不填关键词 = 按今日热点）
+  R.jobsBefore = await js(`return (await window.app.auto.jobs()).map((j) => j.name);`);
+  await js(`await window.app.auto.saveJobs([
+      { id: "jobA", name: "AI 副业早晚两次", enabled: true, times: "08:30, 20:00", weekdays: "1,2,3,4,5,6,7", keywords: "AI 副业", source: "toutiao", days: 3, count: 2, targets: "toutiao", push: true },
+      { id: "jobB", name: "热点午间", enabled: true, times: "12:00", weekdays: "1,2,3,4,5", keywords: "", source: "toutiao", days: 3, count: 1, targets: "toutiao", push: false },
+    ]); return true;`);
   await nav("settings");
   await sleep(800);
   await js(`document.getElementById("settings-platform-login").scrollIntoView(); return true;`);
@@ -149,9 +157,12 @@ async function run(win) {
   await shot("设置-定时自动创作");
 
   // ---- 10. 立即运行一次自动创作：拆过的跳过，剩下的写成头条号并推草稿箱 ----
-  const t = await js(`return (await window.app.auto.runNow()).task.id;`);
+  const t = await js(`return (await window.app.auto.runNow("jobA")).task.id;`);
   await waitFor(`const t = (await window.app.tasks.list()).find((x) => x.id === ${JSON.stringify(t)}); return t && ["done", "failed", "cancelled"].includes(t.status) ? t : null;`, 180000, "自动创作完成");
-  R.auto = await js(`const s = await window.app.auto.status(); return { next: s.next ? new Date(s.next).toString().slice(0, 21) : "", last: s.lastRun && s.lastRun.summary, status: s.lastRun && s.lastRun.status };`);
+  R.auto = await js(`const s = await window.app.auto.status(); return { next: s.next ? new Date(s.next).toString().slice(0, 21) : "", nextJob: s.nextJob && s.nextJob.name, jobs: s.jobs.length, last: s.lastRun && s.lastRun.summary, lastJob: s.lastRun && s.lastRun.jobName, status: s.lastRun && s.lastRun.status };`);
+  const t2 = await js(`return (await window.app.auto.runNow("jobB")).task.id;`);
+  await waitFor(`const t = (await window.app.tasks.list()).find((x) => x.id === ${JSON.stringify(t2)}); return t && ["done", "failed", "cancelled"].includes(t.status) ? t : null;`, 180000, "热点任务完成");
+  R.autoHot = await js(`const s = await window.app.auto.status(); return { lastJob: s.lastRun && s.lastRun.jobName, keyword: s.lastRun && s.lastRun.keyword, status: s.lastRun && s.lastRun.status, summary: s.lastRun && s.lastRun.summary };`);
   await nav("home");
   await sleep(1200);
   await shot("工作台-自动创作之后");
@@ -160,6 +171,8 @@ async function run(win) {
   const ok = R.migrated.length === 1 && R.migrated[0].loggedIn && R.migrated[0].bound
     && R.search.length === 3 && !R.search.some((s) => s.includes("五天前")) && /3\.2万/.test(R.search[0])
     && R.contents.some((c) => c.needsRewrite && !c.push) && R.contents.some((c) => c.push === "saved" && c.pushAccount)
+    && R.contents.some((c) => c.pics >= 1 && c.cover) && R.jobsBefore.length === 1 && R.autoHot && R.autoHot.status === "done" && R.autoHot.keyword === "今日热点"
+    && R.tech.items >= 3 && /自动/.test(R.tech.hint)
     && R.writer.warn && R.pasteDup.duplicate === true && R.pasteNew.duplicate === false && R.breakdowns.every((b) => b.topics === 3);
   console.log("E2E RESULT " + JSON.stringify(R));
   console.log(ok ? "E2E OK" : "E2E FAIL");

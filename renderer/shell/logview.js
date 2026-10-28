@@ -14,13 +14,33 @@
   const LEVEL_ICON = { debug: "·", info: "i", warn: "!", error: "×" };
   const dayTime = (t) => { const d = new Date(t); const today = new Date(); const same = d.toDateString() === today.toDateString(); return (same ? "" : `${d.getMonth() + 1}月${d.getDate()}日 `) + `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
   // 模块名 → 中文标签和颜色（任务的日志用任务标题做模块名）
-  const SCOPES = { main: ["应用", "gray"], update: ["更新", "teal"], shell: ["界面", "gray"], content: ["内容", "violet"], task: ["任务", "blue"], publish: ["推送", "orange"], renderer: ["页面", "gray"] };
+  const SCOPES = { discover: ["找爆款", "green"], auto: ["自动创作", "violet"], updater: ["更新", "teal"], main: ["应用", "gray"], update: ["更新", "teal"], shell: ["界面", "gray"], content: ["内容", "violet"], task: ["任务", "blue"], publish: ["推送", "orange"], renderer: ["页面", "gray"] };
   const PALETTE = ["blue", "violet", "green", "orange", "teal", "pink"];
   function scopeInfo(scope) {
     if (!scope) return { label: "", color: "gray" };
     if (SCOPES[scope]) return { label: SCOPES[scope][0], color: SCOPES[scope][1] };
     let n = 0; for (const ch of scope) n = (n * 31 + ch.charCodeAt(0)) >>> 0;
     return { label: scope.length > 10 ? scope.slice(0, 10) + "…" : scope, color: PALETTE[n % PALETTE.length] };
+  }
+  // 「重点」视图：只看做成了什么（拆解、写稿、平台版本、推送、自动创作的结果）和警告错误；
+  // 搜索、读正文、任务开始、推送的每一步这些过程性日志收起来，点「全部」才显示
+  const MINOR_TASK = /^(找爆款|搜索|读正文|AI 取标题|AI 润色|AI 处理|登录|打开|测试|冒烟|示例|检查|下载更新)/;
+  function important(e) {
+    if (e.level === "error" || e.level === "warn") return true;
+    if (e.level === "debug") return false;
+    const m = e.message || "";
+    if (e.scope === "task") {
+      if (/^开始：/.test(m)) return false;
+      const title = m.replace(/ (完成|已取消)（[\d.]+ 秒）$/, "");
+      // 批量 / 自动创作有自己更详细的汇总行（找到几篇、写成几篇…），任务完成这一行就不重复显示
+      return / 完成（/.test(m) && !MINOR_TASK.test(title) && !/^(批量拆解并创作|自动创作|定时自动创作|AI 写稿|写稿：)/.test(title);
+    }
+    if (e.scope === "auto") return /完成：|已拆解|已写好|已推送|需改写|没有找到/.test(m) || /^(定时|手动)自动创作/.test(m);
+    if (e.scope === "publish") return /迁移|登录成功|已存入.*草稿箱|已填好|已打开抖音/.test(m);
+    if (e.scope === "content") return /已写好|已为「.*」生成配图|不需要配图|运用 \d+ 条写法/.test(m);
+    if (e.scope === "update" || e.scope === "updater") return /已下载|新版本|回滚|失败/.test(m);
+    if (e.scope === "main") return /启动/.test(m);
+    return false;
   }
   const line = (e) => `${ts(e.time)} [${e.level.toUpperCase()}]${e.scope ? ` [${e.scope}]` : ""} ${e.message}`;
 
@@ -45,13 +65,13 @@
   }
 
   function createLogView({ compact = false } = {}) {
-    let level = "";
+    let level = compact ? "focus" : "";
     let query = "";
     let follow = true;
 
     const levelSel = compact
-      ? h("div", { class: "log-chips", role: "radiogroup" }, ...[["", "全部"], ["info", "信息"], ["warn", "警告"], ["error", "错误"]].map(([v, l]) =>
-        h("button", { class: "log-chip" + (v === "" ? " active" : ""), dataset: { value: v }, onclick: (e) => {
+      ? h("div", { class: "log-chips", role: "radiogroup" }, ...[["focus", "重点"], ["", "全部"], ["warn", "警告"], ["error", "错误"]].map(([v, l]) =>
+        h("button", { class: "log-chip" + (v === "focus" ? " active" : ""), title: v === "focus" ? "只看做成了什么和出错的地方" : "", dataset: { value: v }, onclick: (e) => {
           level = v; for (const b of levelSel.children) b.classList.toggle("active", b === e.currentTarget); redraw();
         } }, l)))
       : h("select", { class: "input input-sm", title: "最低级别", onchange: () => { level = levelSel.value; redraw(); } },
@@ -62,20 +82,19 @@
     const count = h("span", { class: "muted small log-count" });
     const followBtn = iconBtn("arrowDown", "自动滚动到最新", () => { follow = !follow; followBtn.classList.toggle("on", follow); if (follow) scrollEnd(); }, "on");
 
-    const match = (e) => (!level || RANK[e.level] >= RANK[level]) && (!query || e.message.toLowerCase().includes(query) || e.scope.toLowerCase().includes(query));
-    // 面板里的一条：左边色条表示级别，第一行 时间 + 模块标签，第二行消息；隔了 2 分钟以上插一条时间分隔
+    const match = (e) => (!level || (level === "focus" ? important(e) : RANK[e.level] >= RANK[level])) && (!query || e.message.toLowerCase().includes(query) || e.scope.toLowerCase().includes(query));
+    // 面板里的一条：紧凑的一行「时间 · 模块 · 消息」，警告 / 错误整行染色；隔了 2 分钟以上插一条时间分隔
     let lastTime = 0;
     const compactRow = (e) => {
       const nodes = [];
       if (e.time - lastTime > 120000) nodes.push(h("div", { class: "log-sep" }, h("span", {}, dayTime(e.time))));
       lastTime = e.time;
       const sc = scopeInfo(e.scope);
-      nodes.push(h("div", { class: `log-item ${e.level}` },
-        h("div", { class: "log-meta" },
-          h("span", { class: "log-badge " + e.level }, LEVEL_ICON[e.level] || "·"),
-          sc.label ? h("span", { class: `log-tag tag-${sc.color}` }, sc.label) : null,
-          h("span", { class: "log-time" }, ts(e.time).slice(0, 8))),
-        h("div", { class: "log-msg" }, e.message)));
+      const done = e.scope === "task" && / 完成（/.test(e.message);
+      nodes.push(h("div", { class: `log-line ${e.level}${done ? " done" : ""}`, title: `${ts(e.time)} ${LEVEL_TEXT[e.level] || ""}` },
+        h("span", { class: "log-time" }, ts(e.time).slice(0, 8)),
+        h("span", { class: `log-tag tag-${sc.color}` }, sc.label || "·"),
+        h("span", { class: "log-msg" }, e.level === "error" ? "✗ " : e.level === "warn" ? "⚠ " : done ? "✓ " : "", e.message)));
       return nodes;
     };
     const row = compact

@@ -99,3 +99,9 @@ test("extractJson：裸 JSON、代码块、前后有废话", () => {
   assert.deepEqual(extractJson('结果如下 {"topics":[1]} 完'), { topics: [1] });
   assert.equal(extractJson("没有 JSON"), undefined);
 });
+
+test("extractJson：去掉推理模型的思考过程；JSON 被截断时救回完整的几项", () => {
+  assert.deepEqual(extractJson('<think>先想想 [1,2]</think>[{"title":"A"}]'), [{ title: "A" }]);
+  assert.deepEqual(extractJson('好的，选题如下：\n[{"title":"A"},{"title":"B"},{"title":"C","ang'), [{ title: "A" }, { title: "B" }]);
+  assert.deepEqual(extractJson('{"title":"只有一个"}'), { title: "只有一个" });
+});

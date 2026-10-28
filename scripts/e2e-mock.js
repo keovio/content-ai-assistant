@@ -37,6 +37,16 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&l
 let base = "";
 const aiCalls = [];
 const drafts = [];
+let imageCalls = 0;
+// 16×16 的纯色 PNG（模拟生图返回）
+const TINY_PNG = (() => {
+  const zlib = require("zlib");
+  const crc = (b) => { let c, t = []; for (let n = 0; n < 256; n++) { c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } let x = 0xffffffff; for (const v of b) x = t[(x ^ v) & 0xff] ^ (x >>> 8); return (x ^ 0xffffffff) >>> 0; };
+  const chunk = (type, data) => { const len = Buffer.alloc(4); len.writeUInt32BE(data.length); const td = Buffer.concat([Buffer.from(type), data]); const c = Buffer.alloc(4); c.writeUInt32BE(crc(td)); return Buffer.concat([len, td, c]); };
+  const w = 16, hgt = 16, ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(hgt, 4); ihdr[8] = 8; ihdr[9] = 2;
+  const raw = Buffer.alloc((w * 3 + 1) * hgt); for (let y = 0; y < hgt; y++) for (let x = 0; x < w; x++) { const o = y * (w * 3 + 1) + 1 + x * 3; raw[o] = 80; raw[o + 1] = 120; raw[o + 2] = 220; }
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk("IHDR", ihdr), chunk("IDAT", zlib.deflateSync(raw)), chunk("IEND", Buffer.alloc(0))]).toString("base64");
+})();
 function card(id) {
   const a = ARTICLES[id];
   const jump = `${base}/sou/jump?url=${encodeURIComponent(`${base.replace("127.0.0.1", "localhost")}/a${id}/`)}`;
@@ -65,12 +75,18 @@ function aiReply(messages) {
     if (/早上六点起床的人到底赢在哪里/.test(u)) return `# 早起的人赢在哪（${pf}版）\n\n` + ARTICLES["7002"].body;
     return `# 上班族 AI 提效 3 习惯（${pf}版）\n\n这是为${pf}改写的版本：把重复的事交给 AI，早上排日程、会议记纪要、周五做复盘，三个习惯一个比一个容易坚持。`;
   }
+  if (/配图的画面描述/.test(u)) return JSON.stringify({ style: "扁平插画", cover: "办公桌上的笔记本电脑和一杯咖啡，清晨阳光", images: [{ after: "", alt: "排日程", prompt: "一个人对着屏幕上的日程表微笑" }, { after: "", alt: "复盘", prompt: "周五傍晚的书桌，写着复盘笔记" }] });
   if (/只回复两个字/.test(u)) return "你好";
   return "好的";
 }
 const server = http.createServer((req, res) => {
   const u = new URL(req.url, base);
   const send = (code, body, type = "text/html; charset=utf-8", headers = {}) => { res.writeHead(code, { "Content-Type": type, ...headers }); res.end(body); };
+  if (u.pathname === "/img/images/generations" && req.method === "POST") {
+    let buf = ""; req.on("data", (d) => { buf += d; });
+    req.on("end", () => { imageCalls++; send(200, JSON.stringify({ data: [{ b64_json: TINY_PNG }] }), "application/json"); });
+    return;
+  }
   if (u.pathname === "/openai/chat/completions" && req.method === "POST") {
     let buf = "";
     req.on("data", (d) => { buf += d; });
@@ -106,8 +122,11 @@ const server = http.createServer((req, res) => {
     return send(200, html(`<textarea placeholder="请输入文章标题（2～30个字）" style="width:600px"></textarea>
       <div class="ProseMirror" contenteditable="true" style="min-height:300px;width:800px;border:1px solid #ccc"></div>
       <button id="save">存草稿</button><span id="tip"></span>
-      <script>document.getElementById("save").onclick=async()=>{const t=document.querySelector("textarea").value,b=document.querySelector(".ProseMirror").innerText;
-        await fetch("/mp/save",{method:"POST",body:JSON.stringify({title:t,body:b})});document.getElementById("tip").textContent="已保存";};</script>`, "发文"));
+      <script>
+        // 模拟平台编辑器：粘贴图片时自己「上传」并插入 <img>
+        document.querySelector(".ProseMirror").addEventListener("paste",(e)=>{const f=[...(e.clipboardData&&e.clipboardData.files||[])];if(f.length){e.preventDefault();for(const x of f){const img=document.createElement("img");img.dataset.pasted="1";img.alt=x.type;document.querySelector(".ProseMirror").appendChild(img);}}});
+        document.getElementById("save").onclick=async()=>{const t=document.querySelector("textarea").value,b=document.querySelector(".ProseMirror").innerText,imgs=document.querySelectorAll(".ProseMirror img").length;
+        await fetch("/mp/save",{method:"POST",body:JSON.stringify({title:t,body:b,imgs})});document.getElementById("tip").textContent="已保存";};</script>`, "发文"));
   }
   if (u.pathname === "/mp/save" && req.method === "POST") {
     let buf = ""; req.on("data", (d) => { buf += d; }); req.on("end", () => { try { drafts.push(JSON.parse(buf)); } catch { /* ignore */ } send(200, "{}", "application/json"); });
@@ -143,10 +162,11 @@ server.listen(0, "127.0.0.1", async () => {
   const run = await runApp("run");
   const m = run.out.match(/E2E RESULT (.*)/);
   const result = m ? JSON.parse(m[1]) : {};
-  result.mockDrafts = drafts.map((d) => d.title);
+  result.mockDrafts = drafts.map((d) => d.title + (d.imgs ? `（${d.imgs} 张图）` : ""));
+  result.imageCalls = imageCalls;
   result.aiCalls = aiCalls.length;
   fs.writeFileSync(path.join(OUT, "result.json"), JSON.stringify(result, null, 2));
-  const ok = run.code === 0 && /E2E OK/.test(run.out) && drafts.length >= 1;
+  const ok = run.code === 0 && /E2E OK/.test(run.out) && drafts.length >= 1 && drafts.some((d) => d.title && d.imgs >= 1) && imageCalls >= 1;
   console.log((ok ? "E2E OK " : "E2E FAIL ") + JSON.stringify(result));
   console.log("截图：" + OUT);
   server.close();

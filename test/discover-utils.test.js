@@ -116,3 +116,10 @@ test("搜索结果内部去重 + 规范化", () => {
   assert.equal(raw[2].url, "");
   assert.equal(U.dedupe(raw.filter((x) => x.url)).length, 1);
 });
+
+test("没填关键词：今日热点交替取头条和百度，重复话题只取一次", () => {
+  const hot = { toutiao: [{ title: "华为发布会" }, { title: "双十一" }, { title: "降温" }], baidu: [{ title: "华为 发布会！" }, { title: "姆巴佩" }] };
+  assert.deepEqual(U.pickHotTopics(hot, 3), ["华为发布会", "双十一", "姆巴佩"]);
+  assert.deepEqual(U.pickHotTopics(hot, 1), ["华为发布会"]);
+  assert.deepEqual(U.pickHotTopics({}, 3), []);
+});

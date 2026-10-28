@@ -97,14 +97,15 @@
           // ---- 自动创作 ----
           const last = auto.lastRun;
           autoBox.replaceChildren(
-            kv("状态", auto.running ? h("span", { class: "ok-text" }, "● 运行中") : auto.enabled ? h("span", { class: "ok-text" }, "已开启") : h("span", { class: "muted" }, "未开启")),
-            kv("下次运行", auto.enabled && auto.next ? fmtNext(auto.next) : auto.enabled ? "没有设置有效的时间" : "—"),
-            kv("规则", auto.keywords.length ? `${auto.weekdays.length === 7 ? "每天" : "周" + auto.weekdays.map((d) => WD[d]).join("、")} ${auto.times.join("、")} · ${C.SOURCE_NAMES[auto.source]} ·「${auto.keywords.join("、")}」` : "还没设置关键词"),
-            kv("上次", last ? `${C.fmtDate(last.startedAt)} ${last.status === "running" ? "（运行中）" : ""}${last.summary || ""}` : "还没运行过"),
+            kv("状态", auto.running ? h("span", { class: "ok-text" }, "● 运行中") : auto.enabledCount ? h("span", { class: "ok-text" }, `已开启 ${auto.enabledCount} / ${auto.jobs.length} 个任务`) : h("span", { class: "muted" }, auto.jobs.length ? "全部未开启" : "还没有定时任务")),
+            kv("下次运行", auto.next ? `${fmtNext(auto.next)}${auto.nextJob ? " · " + auto.nextJob.name : ""}` : auto.enabledCount ? "没有设置有效的时间" : "—"),
+            ...auto.jobs.slice(0, 4).map((j) => kv(j.name, h("span", { class: j.enabled ? "" : "muted" },
+              `${j.enabled ? "" : "（未开启）"}${j.weekdayList.length === 7 ? "每天" : "周" + j.weekdayList.map((d) => WD[d]).join("、")} ${j.timeList.join("、") || "—"} · ${C.SOURCE_NAMES[j.source]} · ${j.keywordList.length ? "「" + j.keywordList.join("、") + "」" : "今日热点"}`))),
+            kv("上次", last ? `${C.fmtDate(last.startedAt)} ${last.jobName ? last.jobName + "：" : ""}${last.status === "running" ? "（运行中）" : ""}${last.summary || ""}` : "还没运行过"),
             h("p", { class: "muted small-text" }, "只存草稿不发布；重合度过高的不推送并标记「需改写」。需要应用开着才会按时运行。"),
             h("div", { class: "actions" },
               h("button", { class: "btn small", disabled: auto.running, onclick: runNow }, auto.running ? "运行中…" : "立即运行一次"),
-              h("button", { class: "btn small ghost", onclick: toSettings("auto") }, auto.enabled ? "修改" : "去开启")));
+              h("button", { class: "btn small ghost", onclick: toSettings("auto") }, auto.jobs.length ? "管理任务" : "新建任务")));
 
           // ---- 最近拆解 / 稿件 / 排期 ----
           bdBox.replaceChildren(...(bds.length ? bds.slice(0, 5).map((b) => h("button", { class: "item", onclick: go("benchmark", { id: b.id }) },
