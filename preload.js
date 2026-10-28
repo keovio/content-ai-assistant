@@ -99,6 +99,10 @@ contextBridge.exposeInMainWorld("app", {
     defaultFor: (platform, accountId) => ipcRenderer.invoke("publish:defaultFor", platform, accountId),
     openFor: (contentId) => ipcRenderer.invoke("publish:openFor", contentId),
     openShots: () => ipcRenderer.invoke("publish:shots"),
+    // 0.5.4 账号数据：stats() → { accounts: [{ id, platform, name, loggedIn, stats }], totals, running }；refreshStats() 立即重读全部
+    stats: () => ipcRenderer.invoke("publish:stats"),
+    refreshStats: () => ipcRenderer.invoke("publish:refreshStats"),
+    onStats: on("publish:stats"),
     onAccounts: on("publish:accounts"),
     onChanged: on("publish:changed"),
   },

@@ -209,9 +209,33 @@ async function run(win) {
   const t2 = await js(`return (await window.app.auto.runNow("jobB")).task.id;`);
   await waitFor(`const t = (await window.app.tasks.list()).find((x) => x.id === ${JSON.stringify(t2)}); return t && ["done", "failed", "cancelled"].includes(t.status) ? t : null;`, 180000, "热点任务完成");
   R.autoHot = await js(`const s = await window.app.auto.status(); return { lastJob: s.lastRun && s.lastRun.jobName, keyword: s.lastRun && s.lastRun.keyword, status: s.lastRun && s.lastRun.status, summary: s.lastRun && s.lastRun.summary };`);
+  // ---- 11. 0.5.4 账号数据：后台窗口读头条号后台首页 → 工作台账号数据卡片 ----
+  const st = await js(`return await window.app.publish.refreshStats();`);
+  if (st && st.task) await waitFor(`const t = (await window.app.tasks.list()).find((x) => x.id === ${JSON.stringify(st.task && st.task.id)}); return t && ["done", "failed", "cancelled"].includes(t.status) ? t : null;`, 90000, "读取账号数据");
+  R.stats = await js(`const d = await window.app.publish.stats(); return { totals: d.totals, rows: d.accounts.map((a) => ({ name: a.name, fans: a.stats.fans, reads: a.stats.reads, income: a.stats.income, error: a.stats.error, at: !!a.stats.at })) };`);
   await nav("home");
-  await sleep(1200);
+  await js(`window.Shell.toggleLogDock(false); return true;`); // 关掉运行日志面板，按 1440 宽看三列布局
+  await sleep(1500);
   await shot("工作台-自动创作之后");
+  // 三列网格：账号数据占两列、今日热点在右边占两行，同一行等高，卡片不重叠
+  R.layout = await js(`const g = document.querySelector("#page-home .home-grid"); const cards = [...g.children].map((c) => { const r = c.getBoundingClientRect(); return { t: c.querySelector(".card-head h2").textContent.trim(), x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), hgt: Math.round(r.height) }; });
+    const by = (t) => cards.find((c) => c.t.includes(t));
+    const s = by("账号数据"), hot = by("今日热点"), todo = by("待处理"), auto = by("定时自动创作"), bd = by("最近拆解"), rc = by("最近稿件"), wk = by("未来 7 天");
+    const overlap = cards.some((a, i) => cards.some((b, j) => i < j && a.x < b.x + b.w - 1 && b.x < a.x + a.w - 1 && a.y < b.y + b.hgt - 1 && b.y < a.y + a.hgt - 1));
+    const near = (a, b) => Math.abs(a - b) <= 2;
+    return { cols: getComputedStyle(g).gridTemplateColumns.split(" ").length, overlap,
+      statsWide: s.w > todo.w * 1.8, hotRight: hot.x > s.x + s.w - 2 && near(hot.y, s.y) && near(hot.y + hot.hgt, todo.y + todo.hgt),
+      row2: near(todo.y, auto.y) && near(todo.hgt, auto.hgt) && todo.y > s.y + s.hgt - 2,
+      row3: near(bd.y, rc.y) && near(rc.y, wk.y) && near(bd.hgt, rc.hgt) && near(rc.hgt, wk.hgt) && bd.y > todo.y + todo.hgt - 2,
+      statsRows: document.querySelectorAll("#home-stats .stats-table tbody tr").length, tiles: [...document.querySelectorAll("#home-stats .stat-tile b")].map((b) => b.textContent),
+      oldCards: cards.filter((c) => /平台账号|当前运营账号/.test(c.t)).length, cards: cards.map((c) => c.t) };`);
+  // 窄窗口退成一列
+  win.setSize(900, 900);
+  await sleep(800);
+  await shot("工作台-窄窗口");
+  R.layoutNarrow = await js(`return getComputedStyle(document.querySelector("#page-home .home-grid")).gridTemplateColumns.split(" ").length;`);
+  win.setSize(1440, 960);
+  await sleep(500);
   R.final = await js(`return { contents: (await window.app.store.list("contents", { accountId: "*" })).length, breakdowns: (await window.app.store.list("breakdowns")).length, todo: document.querySelector("#home-todo").innerText };`);
 
   const ok = R.migrated.length === 1 && R.migrated[0].loggedIn && R.migrated[0].bound
@@ -219,6 +243,9 @@ async function run(win) {
     && R.contents.some((c) => c.needsRewrite && !c.push) && R.contents.some((c) => c.push === "saved" && c.pushAccount)
     && R.contents.some((c) => c.pics >= 1 && c.cover) && R.jobsBefore.length === 1 && R.autoHot && R.autoHot.status === "done" && R.autoHot.keyword === "今日热点"
     && R.tech.items >= 3 && /自动/.test(R.tech.hint)
+    && R.stats.rows.length === 1 && R.stats.rows[0].fans === 12345 && R.stats.rows[0].reads === 67000 && R.stats.rows[0].income === 88.5 && !R.stats.rows[0].error
+    && R.stats.totals.fans === 12345 && R.layout.cols === 3 && !R.layout.overlap && R.layout.statsWide && R.layout.hotRight && R.layout.row2 && R.layout.row3
+    && R.layout.statsRows === 1 && R.layout.oldCards === 0 && R.layout.cards.length === 7 && R.layoutNarrow === 1
     && R.writer.warn && R.pasteDup.duplicate === true && R.pasteNew.duplicate === false && R.breakdowns.every((b) => b.topics === 3);
   console.log("E2E RESULT " + JSON.stringify(R));
   console.log(ok ? "E2E OK" : "E2E FAIL");

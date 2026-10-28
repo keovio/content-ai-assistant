@@ -20,7 +20,7 @@
 
   // ---------------- AI 模型 ----------------
   window.Shell.registerSettingsSection({
-    id: "ai", title: "AI 模型", icon: "spark", order: 1,
+    id: "ai", title: "AI 模型", icon: "cpu", order: 1,
     render(box) {
       const { row, range } = window.Shell.settingsUI;
       const provSel = h("select", { class: "input" });
@@ -228,7 +228,7 @@
 
   // ---------------- 定时自动创作（可以建多个任务） ----------------
   window.Shell.registerSettingsSection({
-    id: "auto", title: "定时自动创作", icon: "spark", order: 4,
+    id: "auto", title: "定时自动创作", icon: "clock", order: 4,
     render(box) {
       const { row, range } = window.Shell.settingsUI;
       const WD = [["1", "周一"], ["2", "周二"], ["3", "周三"], ["4", "周四"], ["5", "周五"], ["6", "周六"], ["7", "周日"]];
@@ -396,7 +396,7 @@
 
   // ---------------- 推送设置 ----------------
   window.Shell.registerSettingsSection({
-    id: "push", title: "推送到草稿箱", icon: "arrowDown", order: 6,
+    id: "push", title: "推送到草稿箱", icon: "send", order: 6,
     render(box) {
       const { row, toggle, range } = window.Shell.settingsUI;
       box.append(

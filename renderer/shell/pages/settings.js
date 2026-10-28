@@ -197,7 +197,7 @@
         row("主题色", "按钮、选中项和进度条的颜色", swatches("accent", ACCENTS.map(([v, l]) => [v, l, "accent-" + v]))),
         row("界面缩放", "调整所有文字和控件的大小", select("zoom", [[0.8, "80%"], [0.9, "90%"], [1, "100%"], [1.1, "110%"], [1.25, "125%"], [1.5, "150%"]], { parse: Number })));
     } },
-    { id: "background", title: "背景", icon: "image", order: 12, tag: (s) => (s.performanceMode ? "性能模式" : ""), render(box) {
+    { id: "background", title: "背景", icon: "layers", order: 12, tag: (s) => (s.performanceMode ? "性能模式" : ""), render(box) {
       const clearBtn = h("button", { class: "btn small ghost", onclick: async () => { await api.appearance.clearBackground(); window.Shell.toast("已移除自定义背景", "success"); } }, "移除自定义图片");
       const changeBtn = h("button", { class: "btn small", onclick: async () => { const r = await api.appearance.pickBackground(); if (!r.ok && !r.canceled) window.Shell.toast(r.error || "设置背景失败", "error"); } }, "更换图片…");
       const customTools = h("div", { class: "actions" }, changeBtn, clearBtn);
@@ -210,7 +210,7 @@
         row("毛玻璃", "卡片和侧边栏半透明模糊，透出背景", toggle("glass")),
         row("性能模式", "关闭毛玻璃模糊、阴影和动画，界面更流畅、更省电。老电脑或开很多窗口时推荐", toggle("performanceMode")));
     } },
-    { id: "font", title: "字体", order: 14, render(box) {
+    { id: "font", title: "字体", icon: "type", order: 14, render(box) {
       const custom = h("input", { class: "input", list: "font-suggest", placeholder: "输入字体名，如 LXGW WenKai", value: window.Shell.getSettings().fontCustom || "",
         oninput: window.Shell.debounce(() => window.Shell.saveSettings({ fontCustom: custom.value }), 300) });
       const datalist = h("datalist", { id: "font-suggest" }, ...COMMON_FONTS.map((f) => h("option", { value: f })));
@@ -224,7 +224,7 @@
         row("字号", "正文文字大小（界面缩放会再整体放大）", range("fontSize", { min: 12, max: 18, step: 1, format: (v) => v + " px" })),
         h("div", { class: "font-preview" }, h("div", { class: "fp-big" }, "敏捷的棕色狐狸 The quick brown fox"), h("div", { class: "muted small" }, "0123456789 · 预览当前字体和字号")));
     } },
-    { id: "update", title: "关于与更新", icon: "arrowDown", order: 30, render(box, ctx) {
+    { id: "update", title: "关于与更新", icon: "refresh", order: 30, render(box, ctx) {
       const i = ctx.info, sy = ctx.system;
       const stat = (k, v) => h("div", { class: "stat" }, h("div", { class: "muted small" }, k), h("div", { class: "stat-v" }, v));
       const kv = (k, v) => h("div", { class: "kv" }, h("span", { class: "muted" }, k), h("span", { class: "mono" }, v));

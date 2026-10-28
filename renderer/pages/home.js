@@ -1,6 +1,8 @@
 "use strict";
-// 工作台：四步流程条（拆解 → 创作 → 草稿箱 → 发布）、待处理、自动创作状态、今日热点、最近拆解、最近稿件、7 天排期、
-// 各平台登录号数、当前运营账号
+// 工作台：四步流程条（拆解 → 创作 → 草稿箱 → 发布），下面固定三列网格（同一行等高）：
+//   第一行：账号数据（占两列，三项合计 + 每个号的粉丝 / 阅读 / 收益）· 今日热点（右边，占两行高）
+//   第二行：待处理 · 定时自动创作
+//   第三行：最近拆解 · 最近稿件 · 未来 7 天排期
 (function () {
   const { h } = window.Shell;
   const api = window.app;
@@ -13,7 +15,7 @@
     icon: "home",
     order: 10,
     render(root) {
-      const { card, modules } = window.Shell;
+      const { card } = window.Shell;
       root.classList.add("page-wide");
       const flowBox = h("div", { class: "flow" });
       const todoBox = h("div", { class: "item-list" });
@@ -22,8 +24,8 @@
       const bdBox = h("div", { class: "item-list" });
       const recentBox = h("div", { class: "item-list" });
       const weekBox = h("div", { class: "item-list" });
-      const pfBox = h("div", { class: "kv-list" });
-      const brandBox = h("div", { class: "kv-list" });
+      const statsBox = h("div", { class: "stats-box" });
+      const statsBtn = h("button", { class: "btn small ghost", title: "立即重新读取所有号的数据", onclick: refreshStats }, "刷新");
       const go = (id, payload) => () => C.open(id, payload);
       const toSettings = (sec) => () => { window.Shell.openSettings(sec); };
       let hotTab = "toutiao";
@@ -36,19 +38,69 @@
             h("button", { class: "btn primary", onclick: go("benchmark", { tab: "find" }) }, "找爆款"),
             h("button", { class: "btn", onclick: go("writer", { fresh: true }) }, "写一篇"))),
         flowBox,
-        modules(
-          card({ title: "待处理", icon: "tasks", id: "home-todo" }, todoBox),
-          card({ title: "定时自动创作", icon: "spark", id: "home-auto", actions: [h("button", { class: "btn small ghost", onclick: toSettings("auto") }, "设置")] }, autoBox),
-          card({ title: "今日热点", icon: "chart", id: "home-hot", desc: "点一下就去搜这个话题的爆款", actions: [
+        h("div", { class: "home-wrap" }, h("div", { class: "home-grid" },
+          card({ title: "账号数据", icon: "user", id: "home-stats", class: "hg-stats", actions: [statsBtn, h("button", { class: "btn small ghost", onclick: toSettings("platform-login") }, "管理")] }, statsBox),
+          card({ title: "今日热点", icon: "chart", id: "home-hot", class: "hg-hot", desc: "点一下就去搜这个话题的爆款", actions: [
             h("div", { class: "segmented" },
               h("button", { class: "active", dataset: { hot: "toutiao" }, onclick: (e) => pickHot("toutiao", e.currentTarget) }, "头条热榜"),
               h("button", { dataset: { hot: "baidu" }, onclick: (e) => pickHot("baidu", e.currentTarget) }, "百度热搜")),
             h("button", { class: "btn small ghost", title: "刷新", onclick: () => loadHot(true) }, "刷新")] }, hotBox),
-          card({ title: "最近拆解", icon: "bookmark", actions: [h("button", { class: "btn small ghost", onclick: go("benchmark", { tab: "library" }) }, "拆解库")] }, bdBox),
-          card({ title: "最近稿件", icon: "note", actions: [h("button", { class: "btn small ghost", onclick: go("publish", { view: "list" }) }, "全部稿件")] }, recentBox),
-          card({ title: "未来 7 天排期", icon: "cal", actions: [h("button", { class: "btn small ghost", onclick: go("publish", { view: "calendar" }) }, "打开日历")] }, weekBox),
-          card({ title: "平台账号", icon: "share", actions: [h("button", { class: "btn small ghost", onclick: toSettings("platform-login") }, "管理")] }, pfBox),
-          card({ title: "当前运营账号", icon: "user", desc: "所有 AI 输出都按这个账号的定位和语气来写，侧栏顶部可切换", actions: [h("button", { class: "btn small ghost", onclick: toSettings("accounts") }, "编辑")] }, brandBox)));
+          card({ title: "待处理", icon: "tasks", id: "home-todo", class: "hg-todo" }, todoBox),
+          card({ title: "定时自动创作", icon: "clock", id: "home-auto", class: "hg-auto", actions: [h("button", { class: "btn small ghost", onclick: toSettings("auto") }, "设置")] }, autoBox),
+          card({ title: "最近拆解", icon: "bookmark", class: "hg-bd", actions: [h("button", { class: "btn small ghost", onclick: go("benchmark", { tab: "library" }) }, "拆解库")] }, bdBox),
+          card({ title: "最近稿件", icon: "note", class: "hg-recent", actions: [h("button", { class: "btn small ghost", onclick: go("publish", { view: "list" }) }, "全部稿件")] }, recentBox),
+          card({ title: "未来 7 天排期", icon: "cal", class: "hg-week", actions: [h("button", { class: "btn small ghost", onclick: go("publish", { view: "calendar" }) }, "打开日历")] }, weekBox))));
+
+      // ---- 账号数据 ----
+      const fmtNum = (n) => (n == null ? "—" : n >= 1e4 ? C.fmtCount(Math.round(n)) : String(Math.round(n * 100) / 100));
+      const fmtMoney = (n) => (n == null ? "—" : "¥" + (n >= 1e4 ? C.fmtCount(Math.round(n)) : n.toFixed(2)));
+      async function loadStats() {
+        try { drawStats(await C.call(api.publish.stats())); }
+        catch (e) { statsBox.replaceChildren(h("p", { class: "error small" }, e.message)); }
+      }
+      function drawStats(d) {
+        statsBtn.disabled = !!d.running;
+        statsBtn.textContent = d.running ? "读取中…" : "刷新";
+        const rows = d.accounts || [];
+        if (!rows.some((a) => a.loggedIn)) {
+          statsBox.replaceChildren(h("p", { class: "muted" }, "还没登录平台号。登录后会自动读出每个号的粉丝、阅读和收益。"),
+            h("div", { class: "actions" }, h("button", { class: "btn small", onclick: toSettings("platform-login") }, "去登录")));
+          return;
+        }
+        const t = d.totals || {};
+        const tile = (label, val, sub) => h("div", { class: "stat-tile" }, h("span", { class: "muted small-text" }, label), h("b", {}, val), sub ? h("span", { class: "muted small-text" }, sub) : null);
+        const totals = h("div", { class: "stat-tiles" },
+          tile("粉丝合计", fmtNum(t.fans), `${t.accounts} 个号`),
+          tile("阅读合计", fmtNum(t.reads)),
+          tile("收益合计", fmtMoney(t.income), t.failed ? `${t.failed} 个号读取失败` : ""));
+        const when = (s) => (s.at ? C.fmtAgo(s.at) : "—");
+        const table = h("table", { class: "stats-table" },
+          h("thead", {}, h("tr", {}, ...["平台", "账号", "粉丝", "阅读", "收益", "更新时间"].map((x) => h("th", {}, x)))),
+          h("tbody", {}, ...rows.map((a) => {
+            const s = a.stats || {};
+            const bad = !!s.error || !a.loggedIn;
+            const state = !a.loggedIn ? h("span", { class: "stat-err", title: "登录已失效" }, "登录失效")
+              : s.error ? h("span", { class: "stat-err", title: s.error }, "读取失败")
+              : !s.at ? h("span", { class: "muted" }, d.running ? "读取中…" : "等待读取") : null;
+            return h("tr", { class: bad ? "stat-bad" : "", title: s.error || "" },
+              h("td", {}, C.platformTag(a.platform)),
+              h("td", { class: "stat-name" }, a.name),
+              h("td", { class: "num" }, fmtNum(s.fans)),
+              h("td", { class: "num" }, fmtNum(s.reads)),
+              h("td", { class: "num" }, fmtMoney(s.income)),
+              h("td", { class: "stat-when" }, state || "", state && s.at ? " · " : "", s.at ? h("span", { class: "muted", title: C.fmtDate(s.at) }, when(s)) : ""));
+          })));
+        statsBox.replaceChildren(totals, h("div", { class: "stats-scroll" }, table));
+      }
+      async function refreshStats() {
+        try {
+          const r = await C.call(api.publish.refreshStats());
+          if (r && r.busy) window.Shell.toast("正在读取，等这一轮结束", "info");
+          else window.Shell.toast("开始读取账号数据，进度在运行日志里", "success");
+          loadStats();
+        } catch (e) { C.err(e); }
+      }
+      api.publish.onStats(() => { loadStats(); });
 
       function pickHot(id, btn) {
         hotTab = id;
@@ -103,7 +155,7 @@
             ...auto.jobs.slice(0, 4).map((j) => kv(j.name, h("span", { class: j.enabled ? "" : "muted" },
               `${j.enabled ? "" : "（未开启）"}${j.weekdayList.length === 7 ? "每天" : "周" + j.weekdayList.map((d) => WD[d]).join("、")} ${j.timeList.join("、") || "—"} · ${C.SOURCE_NAMES[j.source]} · ${j.keywordList.length ? "「" + j.keywordList.join("、") + "」" : "今日热点"}`))),
             kv("上次", last ? `${C.fmtDate(last.startedAt)} ${last.jobName ? last.jobName + "：" : ""}${last.status === "running" ? "（运行中）" : ""}${last.summary || ""}` : "还没运行过"),
-            h("p", { class: "muted small-text" }, "只存草稿不发布；重合度过高的不推送并标记「需改写」。需要应用开着才会按时运行。"),
+            h("p", { class: "muted small-text" }, "只存草稿不发布，应用开着才会按时跑。"),
             h("div", { class: "actions" },
               h("button", { class: "btn small", disabled: auto.running, onclick: runNow }, auto.running ? "运行中…" : "立即运行一次"),
               h("button", { class: "btn small ghost", onclick: toSettings("auto") }, auto.jobs.length ? "管理任务" : "新建任务")));
@@ -120,19 +172,6 @@
           if (!st.upcoming.length) rows.push(h("p", { class: "muted" }, "未来 7 天还没有排期。在发布页的日历里安排发布日期。"));
           weekBox.replaceChildren(...rows);
 
-          // ---- 平台账号 ----
-          pfBox.replaceChildren(...Object.entries(C.PLATFORM_NAMES).map(([id, name]) => {
-            const n = pas.filter((a) => a.platform === id && a.loggedIn).length;
-            return kv(name, n ? `已登录 ${n} 个号` : h("span", { class: "muted" }, "未登录"));
-          }));
-
-          await C.loadAccounts();
-          const a = C.currentAccount() || {};
-          const bound = pas.filter((p) => p.boundAccountId === a.id && p.loggedIn);
-          brandBox.replaceChildren(kv("账号", a.name || "—"), ...(a.positioning
-            ? [kv("定位", a.positioning), kv("读者", a.audience || "—"), kv("语气", a.tone || "—")]
-            : [h("p", { class: "muted" }, "还没填这个账号的定位。填上定位、目标读者和语气，AI 写出来会更像你。")]),
-          kv("绑定的平台号", bound.length ? bound.map((p) => `${C.platformName(p.platform)}·${p.name}`).join("、") : h("span", { class: "muted" }, "无")));
         } catch (e) { window.Shell.reportError(e); }
       }
       function fmtNext(t) {
@@ -158,12 +197,14 @@
         } catch (e) { C.err(e); }
       }
       this.refresh = refresh;
+      this.loadStats = loadStats;
       C.onData((what) => { if (window.Shell.current === "home" && what !== "materials") refresh(); });
       window.Shell.onSettings((c) => { if (Object.keys(c).some((k) => k.startsWith("ai") || k.startsWith("auto") || k === "currentAccount")) refresh(); });
       api.tasks.onChange((t) => { if (t.type === "auto:run" && ["done", "failed", "cancelled", "running"].includes(t.status) && window.Shell.current === "home") refresh(); });
       refresh();
       loadHot(false);
+      loadStats();
     },
-    onShow() { if (this.refresh) this.refresh(); },
+    onShow() { if (this.refresh) this.refresh(); if (this.loadStats) this.loadStats(); },
   });
 })();

@@ -820,3 +820,43 @@ button.stat:hover { border-color: var(--primary); }
 .img-edit-modal { width: min(560px, calc(100vw - 40px)); max-height: 88vh; overflow: auto; display: flex; flex-direction: column; gap: 12px; }
 .img-edit-title { margin: 0; font-size: 15px; }
 .img-edit-preview { width: 100%; max-height: 300px; object-fit: contain; border-radius: 8px; background: var(--line); }
+
+/* ===================== 0.5.4 工作台：固定三列网格 + 账号数据 ===================== */
+/* 第一行：账号数据（两列）+ 今日热点（右边，占两行高）；第二行：待处理、定时自动创作；第三行：最近拆解、最近稿件、7 天排期。
+   同一行的卡片等高（grid 默认 stretch）。今日热点的列表高度不参与撑开行高，超出时在卡片里滚动。 */
+.home-wrap { container-type: inline-size; }
+.home-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: auto; gap: 18px; align-items: stretch; }
+.home-grid > .card { margin: 0; min-width: 0; display: flex; flex-direction: column; }
+.home-grid > .card > .card-head { flex-wrap: wrap; row-gap: 6px; }
+.home-grid .hg-stats { grid-column: 1 / span 2; grid-row: 1; }
+.home-grid .hg-hot { grid-column: 3; grid-row: 1 / span 2; }
+.home-grid .hg-todo { grid-column: 1; grid-row: 2; }
+.home-grid .hg-auto { grid-column: 2; grid-row: 2; }
+.home-grid .hg-bd { grid-column: 1; grid-row: 3; }
+.home-grid .hg-recent { grid-column: 2; grid-row: 3; }
+.home-grid .hg-week { grid-column: 3; grid-row: 3; }
+.home-grid .hg-hot .hot-box { flex: 1 1 0; height: 0; min-height: 0; overflow: auto; }
+/* 窄窗口 / 经典布局：退成一列，按顺序排 */
+@container (max-width: 760px) {
+  .home-grid { grid-template-columns: minmax(0, 1fr); }
+  .home-grid > .card { grid-column: 1 !important; grid-row: auto !important; }
+  .home-grid .hg-hot .hot-box { flex: none; height: auto; max-height: 420px; }
+}
+[data-layout="classic"] .home-grid { grid-template-columns: minmax(0, 1fr); }
+[data-layout="classic"] .home-grid > .card { grid-column: 1 !important; grid-row: auto !important; }
+[data-layout="classic"] .home-grid .hg-hot .hot-box { flex: none; height: auto; max-height: 420px; }
+
+.stats-box { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+.stat-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.stat-tile { display: flex; flex-direction: column; gap: 2px; padding: 10px 14px; border-radius: 10px; background: var(--primary-soft); min-width: 0; }
+.stat-tile b { font-size: 22px; font-weight: 600; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stats-scroll { overflow: auto; max-height: 260px; }
+.stats-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.stats-table th { text-align: left; font-weight: 500; color: var(--muted); font-size: 12px; padding: 4px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; position: sticky; top: 0; background: var(--surface); }
+.stats-table td { padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.stats-table tr:last-child td { border-bottom: 0; }
+.stats-table th:nth-child(n+3):nth-child(-n+5), .stats-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.stats-table .stat-name { max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
+.stats-table .stat-when { font-size: 12px; }
+.stats-table tr.stat-bad td.num { color: var(--muted); }
+.stat-err { color: var(--error); font-weight: 500; }

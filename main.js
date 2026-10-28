@@ -267,6 +267,8 @@ function runSmokeTest() {
       const bdList = await a.store.list("breakdowns");
       const autoSt = await a.auto.status();
       const ov = await a.discover.overlap("测试文本", "");
+      // 0.5.4：账号数据接口
+      const stats = await a.publish.stats();
       const pages = {};
       for (const id of ["benchmark", "writer", "publish", "home"]) {
         window.Shell.navigate(id);
@@ -275,6 +277,13 @@ function runSmokeTest() {
       }
       const tabs = ["find", "paste", "library"].every((t) => !!document.querySelector("#page-benchmark [data-tab='" + t + "']"));
       const flow = document.querySelectorAll("#page-home .flow-step").length;
+      // 0.5.4：工作台固定三列，有账号数据卡片，去掉了「当前运营账号」「平台账号」
+      const homeCards = [...document.querySelectorAll("#page-home .home-grid > .card .card-head h2")].map((x) => x.textContent.trim());
+      const homeGrid = document.querySelector("#page-home .home-grid");
+      const homeCols = homeGrid ? getComputedStyle(homeGrid).gridTemplateColumns.split(" ").length : 0;
+      // 0.5.4：设置导航每一项都有图标，且不重复
+      const navIcons = [...document.querySelectorAll(".set-nav-item")].map((b) => { const svg = b.querySelector(".ico svg"); return svg ? svg.innerHTML : ""; });
+      const setIcons = navIcons.length >= 8 && navIcons.every(Boolean) && new Set(navIcons).size === navIcons.length;
       const groups = document.querySelectorAll(".set-nav-group").length === 2 && !!document.getElementById("settings-accounts") && document.querySelectorAll(".set-nav-item").length >= 8;
       // 右侧运行日志面板能打开，外观设置能生效
       window.Shell.toggleLogDock(true);
@@ -295,6 +304,7 @@ function runSmokeTest() {
         logCount: logs.length, dock, look, storeOk, providers: aiMeta.providers.length,
         accounts: accounts.length, publish: Array.isArray(pubMeta) ? pubMeta.length : 0, pubAccounts: Array.isArray(pubAccounts), oldApi, groups,
         sources: Array.isArray(discoverMeta) ? discoverMeta.length : 0, breakdowns: Array.isArray(bdList), auto: !!(autoSt && "next" in autoSt), overlap: ov && ov.overlap === -1,
+        stats: !!(stats && Array.isArray(stats.accounts) && stats.totals && "fans" in stats.totals), homeCards, homeCols, setIcons,
         pages, tabs, flow, autoSettings: !!document.getElementById("settings-auto"), pfSettings: !!document.getElementById("settings-platform-login"),
         switcher: !!document.querySelector("#sidebar .acct-switch select"),
         info, source: upd.source,
@@ -307,6 +317,7 @@ function runSmokeTest() {
       && /^(light|dark)$/.test(out.theme) && out.task === "done" && out.logCount > 0 && out.dock && out.look && out.storeOk && out.providers > 0
       && out.accounts >= 1 && out.publish === 5 && out.pubAccounts && !out.oldApi && out.groups && out.switcher
       && out.sources === 5 && out.breakdowns && out.auto && out.overlap && Object.values(out.pages).every(Boolean) && out.tabs && out.flow === 4
+      && out.stats && out.homeCards.some((t) => t.includes("账号数据")) && !out.homeCards.some((t) => t.includes("平台账号") || t.includes("当前运营账号")) && out.homeCards.length === 7 && out.setIcons
       && out.autoSettings && out.pfSettings && !errors.length;
     console.log((ok ? "SMOKE OK " : "SMOKE FAIL ") + JSON.stringify(result));
     clearTimeout(hardStop);
@@ -326,10 +337,13 @@ if (gotLock) {
     publisher.migrate().then((n) => { if (n) broadcast("publish:accounts", { migrated: n }); }).catch((err) => log.warn("迁移平台号失败：" + err.message));
     if (SMOKE) { runSmokeTest(); return; }
     automation.scheduler.start();
+    // 账号数据：启动 2 分钟后读一次，之后超过 12 小时没更新的号自动重读
+    const statsDelay = Number(process.env.CAI_STATS_DELAY || ""); // 测试用：改启动后多久读第一次（毫秒）
+    publisher.startStats({ delay: process.env.CAI_STATS_DELAY && statsDelay >= 0 ? statsDelay : 120000 });
     if (!NO_UPDATES && settings.get("autoCheckUpdate")) setTimeout(() => { checkUpdate({ auto: true }).catch(() => {}); }, 6000);
     app.on("activate", () => { if (!mainWindow || mainWindow.isDestroyed()) createWindow(); });
   });
   // macOS 习惯：关掉窗口应用仍留在 Dock；其他系统直接退出
   app.on("window-all-closed", () => { if (process.platform !== "darwin") app.quit(); });
-  app.on("before-quit", () => { tasks.cancelAll(); log.info("退出"); });
+  app.on("before-quit", () => { publisher.stopStats(); tasks.cancelAll(); log.info("退出"); });
 }

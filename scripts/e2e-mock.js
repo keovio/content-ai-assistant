@@ -6,6 +6,7 @@
 //     第 1 次（seed）：按 0.4.0 的方式在「运营账号 × 头条号」登录空间里写入登录 cookie，模拟老用户
 //     第 2 次（run） ：检查自动迁移成平台号 → 找爆款 → 批量拆解并写成公众号 + 头条号 → 推草稿箱
 //                    （重合度过高的不推送、标记需改写）→ 创作页 / 发布页 / 拆解库 / 设置页截图 → 粘贴链接拆解（去重）→ 立即运行一次自动创作
+//                    → 读取账号数据（后台首页的粉丝 / 阅读 / 收益）→ 工作台三列布局检查
 //   每一步截图保存到输出目录，最后打印 E2E OK / E2E FAIL 和结果 JSON。
 //
 // 用法：node scripts/e2e-mock.js [输出目录]          Linux 无桌面：xvfb-run -a node scripts/e2e-mock.js /tmp/e2e
@@ -115,7 +116,9 @@ const server = http.createServer((req, res) => {
   // ---- 模拟头条号后台 ----
   const logged = /(?:^|;\s*)sessionid=/.test(req.headers.cookie || "");
   if (u.pathname === "/mp/login") return send(200, html(`<p>模拟登录页</p><script>document.cookie="sessionid=new; path=/; max-age=86400";setTimeout(()=>location.href="/mp/home",300)</script>`, "登录"));
-  if (u.pathname === "/mp/home") return logged ? send(200, html("<p>后台首页</p>", "后台")) : send(302, "", "text/plain", { Location: "/mp/login" });
+  // 后台首页：数据概览（账号数据从这里读；数字晚一点才渲染出来，模拟真实后台的异步加载）
+  if (u.pathname === "/mp/home") return logged ? send(200, html(`<p>后台首页</p><div id="ov"><div>粉丝数</div><div class="n">--</div><div>昨日 +12</div><div>阅读/播放</div><div class="n">--</div><div>累计收益</div><div class="n">--</div></div>
+    <script>setTimeout(()=>{const n=document.querySelectorAll("#ov .n");n[0].textContent="12,345";n[1].textContent="6.7万";n[2].textContent="¥88.50";},1200)</script>`, "后台")) : send(302, "", "text/plain", { Location: "/mp/login" });
   if (u.pathname === "/mp/drafts") return send(200, html(`<p>草稿箱</p><ul>${drafts.map((d) => `<li>${esc(d.title)}</li>`).join("")}</ul>`, "草稿箱"));
   if (u.pathname === "/mp/editor") {
     if (!logged) return send(302, "", "text/plain", { Location: "/mp/login" });
@@ -141,7 +144,7 @@ function runApp(phase) {
     const args = [path.join(__dirname, "e2e-driver.js"), "--no-updates"];
     if (process.platform === "linux") args.push("--no-sandbox");
     const env = {
-      ...process.env, E2E_PHASE: phase, E2E_OUT: OUT, E2E_BASE: base, APP_DATA_DIR: DATA, APP_UPDATES_DIR: path.join(DATA, "updates"), APP_NO_UPDATES: "1",
+      ...process.env, E2E_PHASE: phase, E2E_OUT: OUT, E2E_BASE: base, APP_DATA_DIR: DATA, APP_UPDATES_DIR: path.join(DATA, "updates"), APP_NO_UPDATES: "1", CAI_STATS_DELAY: "600000",
       CAI_DISCOVER_OVERRIDES: JSON.stringify({ toutiao: { searchUrl: `${base}/search?q={kw}&days={days}`, warmup: `${base}/`, pages: 1, filterUrl: "/a\\d+/" }, hot: { toutiao: `${base}/hot/toutiao`, baidu: `${base}/hot/baidu` } }),
       CAI_PUBLISH_OVERRIDES: JSON.stringify({ toutiao: { home: `${base}/mp/home`, login: `${base}/mp/login`, drafts: `${base}/mp/drafts`, editor: `${base}/mp/editor`, loginUrl: ["/mp/login"], cookieUrl: `${base}/`, cookies: ["sessionid"] } }),
     };
