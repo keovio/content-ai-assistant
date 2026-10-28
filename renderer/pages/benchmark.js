@@ -66,8 +66,9 @@
           resultHead,
           h("div", { class: "lib-head batch-bar" }, h("label", { class: "check" }, allBox, "全选"),
             h("span", { class: "muted small-text" }, "写成："), targetBox,
-            h("label", { class: "check", title: "写好后直接推送到对应平台的草稿箱（只存草稿，不发布；重合度过高的不推送）" }, pushChk, "直接推进草稿箱"),
-            h("label", { class: "check", title: "按 设置 → 配图 生成封面和文中配图，推草稿箱时一起填进去" }, imgChk, "生成配图"),
+            h("span", { class: "bar-group" }, h("span", { class: "bar-sep" }), h("span", { class: "muted small-text" }, "写好后："),
+            h("label", { class: "check", title: "写好后直接推送到对应平台的草稿箱（只存草稿，不发布；重合度过高的不推送）" }, pushChk, "推送到草稿箱"),
+            h("label", { class: "check", title: "按 设置 → 配图 生成封面和文中配图，推草稿箱时一起填进去" }, imgChk, "生成配图")),
             h("span", { class: "spacer" }), onlyBtn, batchBtn),
           batchStatus, resultList));
 

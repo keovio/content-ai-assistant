@@ -910,3 +910,7 @@ button.stat:hover { border-color: var(--primary); }
 .topic-all { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
 .topic-head .topic-check { margin: 0 2px 0 0; flex: none; }
 .topic.selected { outline: 2px solid var(--primary); outline-offset: -1px; }
+
+/* 0.5.7 对标拆解批量栏：平台和「写好后」选项之间的分隔 */
+.bar-sep { width: 1px; height: 18px; background: var(--line); margin: 0 6px; flex: none; }
+.bar-group { display: inline-flex; align-items: center; gap: 10px; flex-wrap: nowrap; }
