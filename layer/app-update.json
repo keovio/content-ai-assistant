@@ -1,0 +1,19 @@
+{
+  "version": "0.5.0",
+  "electron": "33.4.11",
+  "bootstrap": 1,
+  "sha256": "0f2b2f4a1a57024fd8ee53fdb3c51ea3505b977297d124500ba680887619b39f",
+  "size": 778640,
+  "asarUrl": "https://github.com/keovio/content-ai-assistant/releases/download/v0.5.0/app-update.asar",
+  "installers": {
+    "mac": {
+      "arm64": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-mac-arm64.dmg",
+      "x64": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-mac-x64.dmg"
+    },
+    "win": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-win-x64.exe",
+    "linux": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-linux-x64.AppImage"
+  },
+  "releaseUrl": "https://github.com/keovio/content-ai-assistant/releases/tag/v0.5.0",
+  "notes": "手机预览：创作页和平台版本一键按手机屏幕看文章（标题、正文、配图，按平台排版）；素材库支持图片：可上传，AI 生成的图自动收录，配图时优先复用相符的图，创作页可手动插入素材图；写稿按选题自动引用相关素材",
+  "publishedAt": "2026-10-28T11:26:37.919Z"
+}
