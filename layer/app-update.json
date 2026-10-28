@@ -1,0 +1,19 @@
+{
+  "version": "0.6.2",
+  "electron": "33.4.11",
+  "bootstrap": 1,
+  "sha256": "0c5306623de9f409ce38baa942b7f54db4142b68e38cb3b8f26117c66de2814c",
+  "size": 877895,
+  "asarUrl": "https://github.com/keovio/content-ai-assistant/releases/download/v0.6.2/app-update.asar",
+  "installers": {
+    "mac": {
+      "arm64": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-mac-arm64.dmg",
+      "x64": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-mac-x64.dmg"
+    },
+    "win": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-win-x64.exe",
+    "linux": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-linux-x64.AppImage"
+  },
+  "releaseUrl": "https://github.com/keovio/content-ai-assistant/releases/tag/v0.6.2",
+  "notes": "拆解对标文章时把原文图片和封面一起下载存进素材库（标签「原文图」，自动跳过二维码和小图标）；仿写稿配图默认原图优先，时事新闻直接用原图，不够再 AI 生成，可在 设置 → 配图 → 配图来源 改为只用原图或全部 AI；新增「AI 图带水印」开关，智谱签免责声明后关掉即可去水印；批量配图一次只生成一张，限流自动重试，可随时停止",
+  "publishedAt": "2026-10-28T14:23:35.195Z"
+}
