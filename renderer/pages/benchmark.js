@@ -61,11 +61,14 @@
       const noOffChk = h("input", { type: "checkbox", checked: !!s.discoverNoOfficial });
       const noOffLbl = h("label", { class: "check", title: "按作者名排除央媒、地方媒体、政务号、品牌官方号等" }, noOffChk, "排除官方号");
       noOffChk.addEventListener("change", () => window.Shell.saveSettings({ discoverNoOfficial: noOffChk.checked }));
+      const mergeChk = h("input", { type: "checkbox", checked: s.discoverMergeSimilar !== false });
+      const mergeLbl = h("label", { class: "check", title: "标题说的是同一件事的只留热度最高的一篇；跟拆过 / 写过的是同一件事的也不显示" }, mergeChk, "同一件事只留一篇");
+      mergeChk.addEventListener("change", () => window.Shell.saveSettings({ discoverMergeSimilar: mergeChk.checked }));
       limitSel.addEventListener("change", () => window.Shell.saveSettings({ discoverLimit: Number(limitSel.value) }));
 
       panels.find.append(
         card({ title: "找爆款", icon: "search", class: "bm-search" },
-          h("div", { class: "toolbar" }, pfSel, kwIn, daysSel, limitSel, noOffLbl, searchBtn, stopBtn),
+          h("div", { class: "toolbar" }, pfSel, kwIn, daysSel, limitSel, noOffLbl, mergeLbl, searchBtn, stopBtn),
           h("div", { class: "editor-bar" }, srcHint, loginBtn, h("span", { class: "spacer" }), findStatus)),
         card({ title: "", class: "lib-card" },
           resultHead,
@@ -106,7 +109,7 @@
         resultList.replaceChildren(h("div", { class: "progress" }, h("div", { class: "bar indeterminate" })));
         picked.clear(); drawBatch();
         try {
-          const r = await C.runAi("discover:search", { platform: pfSel.value, keyword, days: Number(daysSel.value), limit: Number(limitSel.value), excludeOfficial: noOffChk.checked }, {
+          const r = await C.runAi("discover:search", { platform: pfSel.value, keyword, days: Number(daysSel.value), limit: Number(limitSel.value), excludeOfficial: noOffChk.checked, mergeSimilar: mergeChk.checked }, {
             title: `找爆款：${C.SOURCE_NAMES[pfSel.value]}「${keyword || "今日热点"}」`,
             onTask: (t) => { searchTask = t.id; if (t.message) findStatus.textContent = t.message; },
           });
@@ -121,7 +124,7 @@
       }
       function drawResults(r) {
         const dayText = DAYS.find((d) => d[0] === daysSel.value)[1];
-        resultHead.replaceChildren(h("b", {}, `${dayText}找到 ${r.total} 篇`), h("span", { class: "muted small-text" }, (r.hidden ? `，已隐藏 ${r.hidden} 篇拆过 / 写过的` : "") + (r.skipped ? `，跳过 ${r.skipped} 篇时政新闻` : "") + (r.official ? `，排除 ${r.official} 篇官方号` : "")),
+        resultHead.replaceChildren(h("b", {}, `${dayText}找到 ${r.total} 篇`), h("span", { class: "muted small-text" }, (r.hidden ? `，已隐藏 ${r.hidden} 篇拆过 / 写过的` : "") + (r.skipped ? `，跳过 ${r.skipped} 篇时政新闻` : "") + (r.official ? `，排除 ${r.official} 篇官方号` : "") + (r.merged ? `，同一件事的 ${r.merged} 篇已合并` : "")),
           r.hotTopics && r.hotTopics.length ? h("span", { class: "muted small-text" }, `（按今日热点：${r.hotTopics.join("、")}）`) : null,
           h("span", { class: "spacer" }), h("span", { class: "muted small-text" }, results.some((x) => x.likes) ? "按点赞从高到低" : "有热度的排在前面"));
         resultList.replaceChildren(...(results.length ? results.map(resultRow) : [h("div", { class: "empty" }, h("p", { class: "muted" }, r.total ? "都拆过了，换个关键词或放宽时间试试" : r.hotTopics ? "今日热点在这个平台没搜到近期文章，填个关键词或放宽时间试试" : "没有找到，换个关键词或放宽时间试试"))]));

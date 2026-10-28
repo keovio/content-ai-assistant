@@ -40,3 +40,10 @@ test("sameTitle：同一标题 / 只差标点 / 互相包含 / 近似都算重�
   assert.equal(dupTitleOf("租房避坑指南大全", ["别的标题", "租房避坑指南大全！"]), "租房避坑指南大全！");
   assert.equal(dupTitleOf("全新的话题标题", ["别的标题"]), "");
 });
+
+test("relatedTitle：同一件事的不同标题算相关，不同事不算", () => {
+  const { relatedTitle } = require("../lib/similarity");
+  assert.equal(relatedTitle("男子回应借助AI买彩票中508万", "西安男子回应AI辅助买彩票喜中508万!提醒大家理性看待好运"), true);
+  assert.equal(relatedTitle("男子回应借助AI买彩票中508万", "男子回应借助AI买彩票中508万，22元，10个号全中"), true);
+  assert.equal(relatedTitle("30岁以后，我才明白的5件事", "打工人如何三个月存下第一笔钱"), false);
+});
