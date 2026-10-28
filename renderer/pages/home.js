@@ -28,7 +28,7 @@
       const statsBtn = h("button", { class: "btn small ghost", title: "立即重新读取所有号的数据", onclick: refreshStats }, "刷新");
       const go = (id, payload) => () => C.open(id, payload);
       const toSettings = (sec) => () => { window.Shell.openSettings(sec); };
-      let hotTab = "toutiao";
+      let hotTab = "merged";
       let hotData = null;
 
       root.append(
@@ -41,9 +41,8 @@
         h("div", { class: "home-wrap" }, h("div", { class: "home-grid" },
           card({ title: "账号数据", icon: "user", id: "home-stats", class: "hg-stats", actions: [statsBtn, h("button", { class: "btn small ghost", onclick: toSettings("platform-login") }, "管理")] }, statsBox),
           card({ title: "今日热点", icon: "chart", id: "home-hot", class: "hg-hot", desc: "点一下就去搜这个话题的爆款", actions: [
-            h("div", { class: "segmented" },
-              h("button", { class: "active", dataset: { hot: "toutiao" }, onclick: (e) => pickHot("toutiao", e.currentTarget) }, "头条热榜"),
-              h("button", { dataset: { hot: "baidu" }, onclick: (e) => pickHot("baidu", e.currentTarget) }, "百度热搜")),
+            h("select", { class: "small", title: "看哪个热榜", "aria-label": "热榜来源", onchange: (e) => pickHot(e.currentTarget.value) },
+              ...[["merged", "全网综合"], ["toutiao", "头条热榜"], ["baidu", "百度热搜"], ["weibo", "微博热搜"], ["zhihu", "知乎热榜"], ["douyin", "抖音热榜"], ["bilibili", "B站热搜"]].map(([id, t]) => h("option", { value: id }, t))),
             h("button", { class: "btn small ghost", title: "刷新", onclick: () => loadHot(true) }, "刷新")] }, hotBox),
           card({ title: "待处理", icon: "tasks", id: "home-todo", class: "hg-todo" }, todoBox),
           card({ title: "定时自动创作", icon: "clock", id: "home-auto", class: "hg-auto", actions: [h("button", { class: "btn small ghost", onclick: toSettings("auto") }, "设置")] }, autoBox),
@@ -167,9 +166,8 @@
       }
       api.publish.onStats(() => { loadStats(); });
 
-      function pickHot(id, btn) {
+      function pickHot(id) {
         hotTab = id;
-        for (const b of btn.parentElement.children) b.classList.toggle("active", b === btn);
         drawHot();
       }
       async function loadHot(force) {
@@ -183,7 +181,7 @@
         hotBox.replaceChildren(...(list.length ? [h("ol", { class: "hot-list" }, ...list.map((x, i) => h("li", {},
           h("span", { class: "hot-rank" + (i < 3 ? " top" : "") }, String(i + 1)),
           h("button", { class: "link-btn hot-title", title: "去找这个话题的爆款", onclick: go("benchmark", { tab: "find", keyword: x.title, search: true }) }, x.title),
-          x.hot ? h("span", { class: "muted small-text" }, C.fmtCount(x.hot)) : null))),
+          hotTab === "merged" && x.platforms && x.platforms.length > 1 ? h("span", { class: "muted small-text", title: "同时上了几个平台的热榜" }, `${x.platforms.length} 平台`) : x.hot ? h("span", { class: "muted small-text" }, C.fmtCount(x.hot)) : null))),
           hotData.skipped ? h("p", { class: "muted small-text hot-skipped" }, `已跳过 ${hotData.skipped} 条时政新闻（设置 → 定时自动创作 可关）`) : null]
           : [h("p", { class: "muted small-text" }, (hotData.errors || []).join("；") || "暂时没取到热点")]));
       }

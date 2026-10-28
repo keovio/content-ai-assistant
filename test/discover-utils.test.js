@@ -150,3 +150,12 @@ test("pickHotTopics 跳过时政热点", () => {
   assert.deepEqual(U.pickHotTopics(hot, 3, { on: true }), ["年轻人开始流行早睡", "秋天养生喝什么汤"]);
   assert.equal(U.pickHotTopics(hot, 5).length, 5);
 });
+
+test("mergeHot 多平台合并：同一件事合一条，上榜平台多的排前", () => {
+  const U = require("../lib/discover/utils");
+  const m = U.mergeHot({ toutiao: [{ title: "某地暴雨预警升级", hot: 100 }, { title: "新手机发布", hot: 90 }], weibo: [{ title: "新手机发布", hot: 5000 }], douyin: [{ title: "新手机正式发布", hot: 8 }] });
+  assert.equal(m[0].title, "新手机发布");
+  assert.equal(m[0].platforms.length, 3);
+  const t = U.pickHotTopics({ merged: m, toutiao: [] }, 2);
+  assert.deepEqual(t, ["新手机发布", "某地暴雨预警升级"]);
+});
