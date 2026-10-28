@@ -1,0 +1,19 @@
+{
+  "version": "0.6.1",
+  "electron": "33.4.11",
+  "bootstrap": 1,
+  "sha256": "4240e6fa0cbcae94b7a35cef4d53aa975457d4617395ca89a2e66135b235adfb",
+  "size": 867991,
+  "asarUrl": "https://github.com/keovio/content-ai-assistant/releases/download/v0.6.1/app-update.asar",
+  "installers": {
+    "mac": {
+      "arm64": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-mac-arm64.dmg",
+      "x64": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-mac-x64.dmg"
+    },
+    "win": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-win-x64.exe",
+    "linux": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-linux-x64.AppImage"
+  },
+  "releaseUrl": "https://github.com/keovio/content-ai-assistant/releases/tag/v0.6.1",
+  "notes": "批量配图改为一次只生成一张图，避免生图接口报「请求太频繁」，遇到限流自动等待重试；新增「停止配图」按钮，在后台任务里取消一篇也会停下整批，不再继续开新任务；修复 AI 任务点取消停不下来的问题；配图每张图等待放宽到 5 分钟；发布页批量配图、批量推送显示每篇状态",
+  "publishedAt": "2026-10-28T14:06:26.625Z"
+}
