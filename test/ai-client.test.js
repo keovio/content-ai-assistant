@@ -105,3 +105,34 @@ test("extractJson：去掉推理模型的思考过程；JSON 被截断时救回�
   assert.deepEqual(extractJson('好的，选题如下：\n[{"title":"A"},{"title":"B"},{"title":"C","ang'), [{ title: "A" }, { title: "B" }]);
   assert.deepEqual(extractJson('{"title":"只有一个"}'), { title: "只有一个" });
 });
+
+// 0.6.0：发完 finish_reason 却不发 [DONE] 也不断开（之前会一直卡在「进行中」）
+function hangingBody(chunks) {
+  const enc = new TextEncoder();
+  return { [Symbol.asyncIterator]() { let i = 0; return { next: () => (i < chunks.length ? Promise.resolve({ value: enc.encode(chunks[i++]), done: false }) : new Promise(() => {})), return: () => Promise.resolve({ done: true }) }; } };
+}
+test("流式：看到 finish_reason 就结束，不等永远不来的 [DONE]", async () => {
+  const fin = `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: "stop" }] })}\n\n`;
+  const fetchImpl = async () => ({ ok: true, status: 200, headers: new Map([["content-type", "text/event-stream"]]), body: hangingBody([ev("你"), ev("好"), fin]) });
+  const ai = createAiClient({ fetchImpl, getConfig: () => cfg, timeoutMs: 60000 });
+  const t0 = Date.now();
+  const r = await ai.chat([{ role: "user", content: "x" }]);
+  assert.equal(r.text, "你好");
+  assert.ok(Date.now() - t0 < 5000);
+});
+test("流式：读流卡住时取消能立刻生效；推理内容会回调 onThinking", async () => {
+  const think = `data: ${JSON.stringify({ choices: [{ delta: { reasoning_content: "想一想" } }] })}\n\n`;
+  const fetchImpl = async () => ({ ok: true, status: 200, headers: new Map([["content-type", "text/event-stream"]]), body: hangingBody([think, ev("半")]) });
+  const ai = createAiClient({ fetchImpl, getConfig: () => cfg, timeoutMs: 60000 });
+  const ctl = new AbortController();
+  let thought = 0;
+  const p = ai.chat([{ role: "user", content: "x" }], { signal: ctl.signal, onThinking: (n) => { thought = n; } });
+  setTimeout(() => ctl.abort(), 50);
+  await assert.rejects(p);
+  assert.equal(thought, 3);
+});
+test("流式：只有心跳注释没有数据，按卡顿超时报错", async () => {
+  const fetchImpl = async () => ({ ok: true, status: 200, headers: new Map([["content-type", "text/event-stream"]]), body: { async *[Symbol.asyncIterator]() { const enc = new TextEncoder(); while (true) { await new Promise((r) => setTimeout(r, 20)); yield enc.encode(": keep-alive\n\n"); } } } });
+  const ai = createAiClient({ fetchImpl, getConfig: () => cfg, timeoutMs: 200 });
+  await assert.rejects(ai.chat([{ role: "user", content: "x" }]), /长时间没有返回/);
+});

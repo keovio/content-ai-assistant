@@ -110,3 +110,13 @@ test("detail：批量任务的逐项状态随进度推给界面", async () => {
   assert.ok(seen.includes("running,queued"));
   assert.equal(done.detail.items[1].stage, "失败");
 });
+
+test("取消后任务不响应，过一会儿强制结束", async () => {
+  const tm = createTaskManager({ throttleMs: 0, cancelGraceMs: 50 });
+  tm.register("stuck", () => new Promise(() => {}));
+  const t = tm.run("stuck");
+  await sleep(5);
+  tm.cancel(t.id);
+  const done = await tm.wait(t.id);
+  assert.equal(done.status, "cancelled");
+});

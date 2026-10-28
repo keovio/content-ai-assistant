@@ -168,6 +168,17 @@ async function run(win) {
       bar.querySelector('[data-batch="加入日历"]').click();
       await new Promise((r) => setTimeout(r, 1200));
       return { shown: !bar.hidden, added: (await window.app.store.list("contents")).filter((c) => c.status === "idea").length - before };`);
+    // 0.6.0 发布页批量配图：勾两篇 → 批量配图 → 每行有状态
+    await nav("publish");
+    await js(`document.querySelector("#page-publish [data-tab='list']") && document.querySelector("#page-publish [data-tab='list']").click(); return true;`);
+    await sleep(500);
+    await js(`const rows = [...document.querySelectorAll("#page-publish .lib-row")].filter((r) => /早起|AI 提效/.test(r.textContent)).slice(0, 2);
+      rows.forEach((r) => { const cb = r.querySelector("input[type=checkbox]"); cb.checked = true; cb.dispatchEvent(new Event("change")); });
+      [...document.querySelectorAll("#page-publish button")].find((b) => b.textContent.startsWith("批量配图")).click(); return rows.length;`);
+    await waitFor(`const b = document.querySelector(".modal .btn.primary"); if (b) { b.click(); return true; } return null;`, 5000, "配图确认框");
+    await waitFor(`const t = document.querySelector("#page-publish .batch-prog"); return t && /配图完成/.test(t.textContent) ? t.textContent : null;`, 90000, "批量配图");
+    R.imgBatch = await js(`return { prog: document.querySelector("#page-publish .batch-prog").textContent, badges: [...document.querySelectorAll("#page-publish .lib-row .op-badge")].map((b) => b.className.replace("op-badge ", "") + ":" + b.textContent) };`);
+    await shot("发布-批量配图");
     await nav("materials");
     await js(`window.Shell.toggleLogDock(false); return true;`);
     await sleep(1200);
@@ -286,7 +297,7 @@ async function run(win) {
     && R.tech.items >= 3 && /自动/.test(R.tech.hint)
     && R.stats.rows.length === 1 && R.stats.rows[0].fans === 12345 && R.stats.rows[0].reads === 67000 && R.stats.rows[0].income === 88.5 && !R.stats.rows[0].error
     && R.stats.totals.fans === 12345 && R.layout.cols === 3 && !R.layout.overlap && R.layout.statsWide && R.layout.hotRight && R.layout.row2 && R.layout.row3
-    && R.layout.statsRows === 1 && R.layout.tiles.length === 0 && R.growthUi.acc === 1 && R.layout.oldCards === 0 && R.layout.cards.length === 7 && R.layoutNarrow === 1 && R.stats.growth && R.stats.growth.day.fans === 145 && R.stats.growth.day.income === 3.5 && R.growthUi && R.growthUi.day >= 3 && R.growthUi.today === 1 && R.growthUi.month >= 3 && R.growthUi.income >= 3 && R.batchLive && R.batchLive.badges.length === 2 && R.batchLive.progress && R.batchRows.filter((x) => x.badge).length === 2 && R.batchRows.filter((x) => x.badge).every((x) => x.locked && !/排队|中$/.test(x.badge)) && R.topicBatch && R.topicBatch.barShown && R.topicBatch.disabled && R.topicBatch.saved >= 3 && R.topicBatch.starred === 3 && R.topicBatch.count.startsWith("已选 3") && R.topicBatch2.shown && R.topicBatch2.added >= 3 && R.matLayout && R.matLayout.cols === 3 && R.matLayout.leftStack && R.matLayout.allRight
+    && R.layout.statsRows === 1 && R.layout.tiles.length === 0 && R.growthUi.acc === 1 && R.layout.oldCards === 0 && R.layout.cards.length === 7 && R.layoutNarrow === 1 && R.stats.growth && R.stats.growth.day.fans === 145 && R.stats.growth.day.income === 3.5 && R.growthUi && R.growthUi.day >= 3 && R.growthUi.today === 1 && R.growthUi.month >= 3 && R.growthUi.income >= 3 && R.batchLive && R.batchLive.badges.length === 2 && R.batchLive.progress && R.batchRows.filter((x) => x.badge).length === 2 && R.batchRows.filter((x) => x.badge).every((x) => x.locked && !/排队|中$/.test(x.badge)) && R.imgBatch && R.imgBatch.badges.length === 2 && R.imgBatch.badges.every((b) => /^(done|warn):/.test(b)) && R.topicBatch && R.topicBatch.barShown && R.topicBatch.disabled && R.topicBatch.saved >= 3 && R.topicBatch.starred === 3 && R.topicBatch.count.startsWith("已选 3") && R.topicBatch2.shown && R.topicBatch2.added >= 3 && R.matLayout && R.matLayout.cols === 3 && R.matLayout.leftStack && R.matLayout.allRight
     && R.writer.warn && R.pasteDup.duplicate === true && R.pasteNew.duplicate === false && R.breakdowns.every((b) => b.topics === 3);
   console.log("E2E RESULT " + JSON.stringify(R));
   console.log(ok ? "E2E OK" : "E2E FAIL");

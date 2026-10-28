@@ -35,6 +35,10 @@
       const pushSel = C.selectEl([["", "全部推送状态"], ["none", "未推送"], ["saved", "已存草稿"], ["unknown", "待确认"], ["failed", "推送失败"], ["rewrite", "需改写"]], "");
       const allBox = h("input", { type: "checkbox", title: "全选" });
       const batchBtn = h("button", { class: "btn small primary", disabled: true, onclick: batchPush }, "推送选中");
+      const imgBatchBtn = h("button", { class: "btn small", disabled: true, title: "按 设置 → 配图 给选中的稿子生成封面和文中配图（两篇同时进行）", onclick: batchImages }, "批量配图");
+      const batchProg = h("span", { class: "muted small-text batch-prog", hidden: true });
+      // 批量时每篇稿子的状态（列表会因数据变化重画，所以单独存着，画行时再贴上）
+      const opState = new Map(); // id → { text, state, tip }
       const count = h("span", { class: "muted small-text" });
       const listEl = h("div", { class: "lib-list" });
       const selected = new Set();
@@ -42,7 +46,7 @@
       let all = [];
       listView.append(card({ title: "", class: "lib-card" },
         h("div", { class: "toolbar lib-toolbar" }, q, pfSel, stSel, pushSel),
-        h("div", { class: "lib-head" }, h("label", { class: "check" }, allBox, "全选"), count, h("span", { class: "spacer" }), batchBtn),
+        h("div", { class: "lib-head" }, h("label", { class: "check" }, allBox, "全选"), count, h("span", { class: "spacer" }), batchProg, imgBatchBtn, batchBtn),
         listEl));
 
       const pushState = (c) => { const r = c.pushes && c.pushes[c.platform]; return r ? r.status : "none"; };
@@ -65,6 +69,8 @@
       function drawBatch() {
         batchBtn.disabled = !selected.size;
         batchBtn.textContent = selected.size ? `推送选中（${selected.size}）` : "推送选中";
+        imgBatchBtn.disabled = !selected.size || imgRunning;
+        imgBatchBtn.textContent = selected.size ? `批量配图（${selected.size}）` : "批量配图";
         allBox.checked = rows.length > 0 && selected.size === rows.length;
         allBox.indeterminate = selected.size > 0 && selected.size < rows.length;
       }
@@ -78,19 +84,22 @@
         const date = h("input", { class: "input input-sm", type: "date", value: c.scheduledAt || "", title: "发布日期" });
         st.addEventListener("change", () => C.save("contents", { id: c.id, status: st.value }).catch(C.err));
         date.addEventListener("change", () => C.save("contents", { id: c.id, scheduledAt: date.value }).catch(C.err));
-        return h("div", { class: "lib-row" },
+        const os = opState.get(c.id);
+        const pics = (String(c.body || "").match(/cai-img:/g) || []).length;
+        return h("div", { class: "lib-row" + (os ? ` op-${os.state}` : ""), dataset: { id: c.id } },
           cb,
           C.platformTag(c.platform),
           h("div", { class: "lib-main" },
             h("a", { class: "lib-title", href: "#", onclick: (e) => { e.preventDefault(); C.open("writer", { id: c.id }); } }, c.title || "未命名"),
             h("div", { class: "lib-sub" },
               h("span", {}, `${C.countWords(c.body)} 字`),
+              pics || c.cover ? h("span", { class: "muted" }, [c.cover ? "有封面" : "", pics ? `${pics} 张配图` : ""].filter(Boolean).join(" · ")) : null,
               h("span", {}, "更新于 " + C.fmtDate(c.updatedAt)),
               c.auto ? h("span", { class: "chip static" }, "自动创作") : null,
               C.overlapTag(c), C.rewriteTag(c), C.pushTag(c),
               r && r.accountName ? h("span", { class: "muted" }, "· " + r.accountName) : null,
               r && r.error ? h("span", { class: "error-text", title: r.error }, r.error) : null)),
-          h("div", { class: "lib-actions show" }, st, date,
+          h("div", { class: "lib-actions show" }, os ? h("span", { class: `op-badge ${os.state}`, title: os.tip || os.text }, os.text) : null, st, date,
             h("button", { class: "btn small ghost", onclick: () => C.open("writer", { id: c.id }) }, "编辑"),
             r && r.url && c.platform !== "douyin" ? h("button", { class: "btn small ghost", onclick: () => C.call(api.publish.openFor(c.id)).catch(C.err) }, "草稿箱") : null,
             pushBtn,
@@ -112,6 +121,48 @@
         } catch (e) { C.err(e); return false; }
         finally { if (btn) btn.disabled = false; }
       }
+      function setOp(id, text, state, tip = "") {
+        opState.set(id, { text, state, tip });
+        const el = [...listEl.children].find((x) => x.dataset && x.dataset.id === id);
+        if (!el) return;
+        let b = el.querySelector(".op-badge");
+        if (!b) { b = h("span", { class: "op-badge" }); el.querySelector(".lib-actions").prepend(b); }
+        b.className = `op-badge ${state}`; b.textContent = text; b.title = tip || text;
+        for (const k of ["queued", "running", "done", "failed", "warn"]) el.classList.toggle(`op-${k}`, k === state);
+      }
+      let imgRunning = false;
+      async function batchImages() {
+        const items = rows.filter((c) => selected.has(c.id));
+        if (!items.length) return;
+        const has = items.filter((c) => c.cover || /cai-img:/.test(c.body || "")).length;
+        if (!(await window.Shell.confirm(`给选中的 ${items.length} 篇生成封面和文中配图？${has ? `其中 ${has} 篇已经有图，会重新配。` : ""}两篇同时进行，可以随时在「后台任务」里停止。`, { okText: "开始配图" }))) return;
+        imgRunning = true; selected.clear(); drawBatch();
+        items.forEach((c) => setOp(c.id, "排队中", "queued"));
+        let n = 0, ok = 0, fail = 0;
+        const prog = () => { batchProg.hidden = false; batchProg.textContent = `配图中 ${n}/${items.length}`; };
+        prog();
+        const queue = [...items];
+        const worker = async () => {
+          while (queue.length) {
+            const c = queue.shift();
+            setOp(c.id, "配图中", "running");
+            try {
+              const r = await C.runAi("ai:images", { contentId: c.id }, { title: `配图「${(c.title || "").slice(0, 16)}」`,
+                onTask: (t) => { if (t.message && t.status === "running") setOp(c.id, t.message.length > 14 ? "配图中…" : t.message, "running", t.message); } });
+              if (!r) setOp(c.id, "已停止", "warn");
+              else if (r.failed && !r.count) { fail++; setOp(c.id, "配图失败", "failed"); }
+              else { ok++; setOp(c.id, `已配 ${r.count} 张${r.cover ? "+封面" : ""}${r.failed ? `，${r.failed} 张失败` : ""}`, r.failed ? "warn" : "done"); }
+            } catch (e) { fail++; setOp(c.id, "配图失败", "failed", e.message); window.Shell.reportError(e); }
+            n++; prog();
+          }
+        };
+        try { await Promise.all([worker(), worker()]); }
+        finally {
+          imgRunning = false; drawBatch();
+          batchProg.textContent = `配图完成：${ok} 篇${fail ? `，${fail} 篇失败` : ""}`;
+          window.Shell.toast(`批量配图结束：${ok} 篇完成${fail ? `，${fail} 篇失败` : ""}`, fail ? "error" : "success", 5000);
+        }
+      }
       async function batchPush() {
         const items = rows.filter((c) => selected.has(c.id));
         if (!items.length) return;
@@ -119,7 +170,14 @@
         const pfs = [...new Set(items.map((c) => C.platformName(c.platform)))].join("、");
         if (!(await window.Shell.confirm(`把选中的 ${items.length} 篇推送到各自平台的草稿箱（${pfs}）？同一平台会一篇一篇排队推送，不会发布。${skip ? `其中 ${skip} 篇需改写，会跳过。` : ""}`, { okText: "开始推送" }))) return;
         selected.clear(); drawBatch();
-        const results = await Promise.all(items.map((c) => pushOne(c, null, { quiet: true })));
+        items.forEach((c) => setOp(c.id, c.needsRewrite ? "需改写，跳过" : "排队推送", c.needsRewrite ? "warn" : "queued"));
+        const results = await Promise.all(items.map(async (c) => {
+          if (c.needsRewrite) return false;
+          setOp(c.id, "推送中", "running");
+          const okOne = await pushOne(c, null, { quiet: true });
+          setOp(c.id, okOne ? "已推送" : "推送失败", okOne ? "done" : "failed");
+          return okOne;
+        }));
         const ok = results.filter(Boolean).length;
         window.Shell.toast(`批量推送结束：${ok} 篇完成，${items.length - ok} 篇未推送`, ok === items.length ? "success" : "error", 5000);
       }
