@@ -364,7 +364,7 @@
         titleBox.hidden = false;
         titleBox.replaceChildren(h("span", { class: "muted small-text" }, "AI 正在想标题…"));
         try {
-          const r = await C.runAi("ai:titles", { content: bodyIn.value.trim() ? (titleIn.value ? titleIn.value + "\n" : "") + bodyIn.value : `选题：${topicIn.value.trim()}\n${outlineIn.value.trim()}`, platform: pfSel.value });
+          const r = await C.runAi("ai:titles", { content: bodyIn.value.trim() ? (titleIn.value ? titleIn.value + "\n" : "") + bodyIn.value : `选题：${topicIn.value.trim()}\n${outlineIn.value.trim()}`, platform: pfSel.value, contentId: current.id || "" });
           if (!r) { titleBox.hidden = true; return; }
           titleBox.replaceChildren(...r.titles.map((t) => h("button", { class: "chip", onclick: () => { titleIn.value = t; if (genRunning && taskId) pinnedTitle = t; markDirty(); titleBox.hidden = true; } }, t)),
             h("button", { class: "btn small ghost", onclick: () => { titleBox.hidden = true; } }, "收起"));

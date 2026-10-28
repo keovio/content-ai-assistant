@@ -29,3 +29,14 @@ test("重合的句子 + 是否超过上限", () => {
   assert.equal(isTooSimilar(31, 30), true);
   assert.equal(isTooSimilar(30, 30), false);
 });
+
+test("sameTitle：同一标题 / 只差标点 / 互相包含 / 近似都算重复", () => {
+  const { sameTitle, dupTitleOf } = require("../lib/similarity");
+  assert.equal(sameTitle("30岁以后，我才明白的5件事", "30岁以后我才明白的5件事！"), true);
+  assert.equal(sameTitle("# 打工人如何三个月存下第一笔钱", "打工人如何三个月存下第一笔钱（干货）"), true);
+  assert.equal(sameTitle("打工人如何三个月存下第一笔钱", "打工人怎样三个月存下第一笔钱"), true);
+  assert.equal(sameTitle("打工人如何三个月存下第一笔钱", "租房避坑：签合同前一定要看这几点"), false);
+  assert.equal(sameTitle("", "随便"), false);
+  assert.equal(dupTitleOf("租房避坑指南大全", ["别的标题", "租房避坑指南大全！"]), "租房避坑指南大全！");
+  assert.equal(dupTitleOf("全新的话题标题", ["别的标题"]), "");
+});

@@ -121,7 +121,7 @@
       }
       function drawResults(r) {
         const dayText = DAYS.find((d) => d[0] === daysSel.value)[1];
-        resultHead.replaceChildren(h("b", {}, `${dayText}找到 ${r.total} 篇`), h("span", { class: "muted small-text" }, (r.hidden ? `，已隐藏 ${r.hidden} 篇拆过的` : "") + (r.skipped ? `，跳过 ${r.skipped} 篇时政新闻` : "") + (r.official ? `，排除 ${r.official} 篇官方号` : "")),
+        resultHead.replaceChildren(h("b", {}, `${dayText}找到 ${r.total} 篇`), h("span", { class: "muted small-text" }, (r.hidden ? `，已隐藏 ${r.hidden} 篇拆过 / 写过的` : "") + (r.skipped ? `，跳过 ${r.skipped} 篇时政新闻` : "") + (r.official ? `，排除 ${r.official} 篇官方号` : "")),
           r.hotTopics && r.hotTopics.length ? h("span", { class: "muted small-text" }, `（按今日热点：${r.hotTopics.join("、")}）`) : null,
           h("span", { class: "spacer" }), h("span", { class: "muted small-text" }, results.some((x) => x.likes) ? "按点赞从高到低" : "有热度的排在前面"));
         resultList.replaceChildren(...(results.length ? results.map(resultRow) : [h("div", { class: "empty" }, h("p", { class: "muted" }, r.total ? "都拆过了，换个关键词或放宽时间试试" : r.hotTopics ? "今日热点在这个平台没搜到近期文章，填个关键词或放宽时间试试" : "没有找到，换个关键词或放宽时间试试"))]));
