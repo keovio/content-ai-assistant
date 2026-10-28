@@ -1,0 +1,19 @@
+{
+  "version": "0.6.0",
+  "electron": "33.4.11",
+  "bootstrap": 1,
+  "sha256": "dd2c711d75f41cae300f82540a75952fe99b97654ab9e575b49cc570b29dd5c5",
+  "size": 864052,
+  "asarUrl": "https://github.com/keovio/content-ai-assistant/releases/download/v0.6.0/app-update.asar",
+  "installers": {
+    "mac": {
+      "arm64": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-mac-arm64.dmg",
+      "x64": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-mac-x64.dmg"
+    },
+    "win": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-win-x64.exe",
+    "linux": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-linux-x64.AppImage"
+  },
+  "releaseUrl": "https://github.com/keovio/content-ai-assistant/releases/tag/v0.6.0",
+  "notes": "修复 AI 任务做完还一直显示进行中、点取消也停不下来的问题（有的 AI 接口发完不断开连接；取消后 5 秒内一定停下）；推理模型思考时显示「正在思考」；配图不再 60 秒就超时失败（改为流式，每张图等待放宽到 5 分钟）；发布页支持批量配图，每篇显示配图进度，批量推送也显示每篇状态",
+  "publishedAt": "2026-10-28T13:58:04.407Z"
+}
