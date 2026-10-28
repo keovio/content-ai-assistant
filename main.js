@@ -213,6 +213,7 @@ const automation = createAutomation({ tasks, store: content.store, settings, log
   dh("discover:hot", (force) => discover.hot({ force: !!force }));
   dh("discover:webLogin", (pf) => discover.webLogin(String(pf)));
   dh("discover:webStatus", async (pf) => ({ loggedIn: await discover.webLoggedIn(String(pf)) }));
+  dh("discover:risk", (text) => automation.riskOf(String(text || "")));
   dh("discover:overlap", (text, refId) => automation.overlapOf(String(text || ""), String(refId || "")));
   dh("discover:duplicate", (item) => automation.findDuplicate(item && typeof item === "object" ? item : {}));
   dh("auto:status", () => automation.status());

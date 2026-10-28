@@ -54,6 +54,8 @@
       // 参考爆款 + 重合度
       const refBox = h("div", { class: "ref-box", hidden: true });
       const ovBox = h("div", { class: "ov-box", hidden: true });
+      const riskBox = h("div", { class: "ov-box risk-box", hidden: true });
+      let riskTimer = null;
 
       // ---- 右：编辑器 ----
       const titleIn = h("input", { class: "input title-input", placeholder: "标题" });
@@ -74,7 +76,7 @@
         if (undoBody === null) return;
         bodyIn.value = undoBody; undoBody = null; undoBtn.hidden = true; markDirty(); updateWc();
       } }, "撤销 AI 修改");
-      const polishSel = C.selectEl([["polish", "润色"], ["shorten", "精简"], ["expand", "扩写"], ["casual", "口语化"], ["formal", "专业化"], ["original", "降重改写"]], "polish");
+      const polishSel = C.selectEl([["polish", "润色"], ["shorten", "精简"], ["expand", "扩写"], ["casual", "口语化"], ["formal", "专业化"], ["original", "降重改写"], ["compliance", "合规改写"]], "polish");
 
       let current = { id: "", refId: "", groupId: "", platformAccountId: "" };
       let ref = null;
@@ -112,7 +114,7 @@
             // 平台版本放在写作设定下面
             versionsCard()),
           card({ title: "编辑器", icon: "note", class: "editor-card", actions: [savedInfo] },
-            ovBox, titleIn, titleBox, bodyIn, imgStrip,
+            ovBox, riskBox, titleIn, titleBox, bodyIn, imgStrip,
             h("div", { class: "editor-bar" },
               wc, h("span", { class: "spacer" }),
               h("button", { class: "btn small", title: "按手机尺寸和平台样式预览", onclick: () => C.phonePreview({ title: titleIn.value.trim(), body: bodyIn.value, platform: pfSel.value, cover: current.cover || "" }) }, "手机预览"),
@@ -177,7 +179,23 @@
           (a.topics || []).length ? h("div", { class: "ref-topics" }, ...a.topics.map((t) => h("button", { class: "chip", onclick: () => { topicIn.value = t.title; if (t.angle && !outlineIn.value) outlineIn.value = "切入角度：" + t.angle; } }, t.title))) : null);
       }
       let ovTimer = null;
-      function checkOverlapSoon() { if (!ref) return; clearTimeout(ovTimer); ovTimer = setTimeout(checkOverlap, 700); }
+      // 违规检测：边写边扫，有风险词就提示，可一键 AI 合规改写
+      function checkRiskSoon() { clearTimeout(riskTimer); riskTimer = setTimeout(checkRisk, 800); }
+      async function checkRisk() {
+        const text = `${titleIn.value}\n${bodyIn.value}`;
+        if (!bodyIn.value.trim() || window.Shell.getSettings().riskCheck === false) { riskBox.hidden = true; return; }
+        let r; try { r = await C.call(api.discover.risk(text)); } catch { return; }
+        if (!r || !r.level) { riskBox.hidden = true; return; }
+        riskBox.hidden = false;
+        riskBox.className = "ov-box risk-box" + (r.level === "high" ? " bad" : "");
+        riskBox.replaceChildren(
+          h("span", { class: "ov-num" }, r.level === "high" ? "违规风险" : "注意用词"),
+          h("span", { class: r.level === "high" ? "ov-warn" : "muted small-text" }, r.issues.slice(0, 6).map((x) => `「${x.word}」${x.type}`).join("、") + (r.issues.length > 6 ? ` 等 ${r.issues.length} 处` : "")),
+          h("span", { class: "spacer" }),
+          h("button", { class: "btn small", onclick: () => { polishSel.value = "compliance"; polish(); } }, "AI 合规改写"),
+          h("details", { class: "ov-snips" }, h("summary", {}, "怎么改"), ...r.issues.map((x) => h("p", { class: "small-text" }, `「${x.word}」×${x.count}（${x.type}）：${x.tip}`))));
+      }
+      function checkOverlapSoon() { checkRiskSoon(); if (!ref) return; clearTimeout(ovTimer); ovTimer = setTimeout(checkOverlap, 700); }
       async function checkOverlap() {
         if (!ref) return null;
         try { const r = await C.call(api.discover.overlap(bodyIn.value, ref.id)); drawOverlap(r); return r; } catch { return null; }
@@ -291,7 +309,7 @@
             if (saved && here()) { current.id = saved.id; dirty = false; savedInfo.textContent = `已保存 · ${C.fmtDate(saved.updatedAt)}`; drawOverlap(saved.refId ? { overlap: saved.overlap, needsRewrite: saved.needsRewrite } : null); drawVersions(); drawPush(saved); }
             if (pinnedTitle && here() && pinnedTitle !== r.title) await save({ quiet: true }); // 生成途中选好的标题
           } else markDirty();
-          updateWc(); checkOverlap();
+          updateWc(); checkOverlap(); checkRiskSoon();
         } catch (e) {
           if (here()) { genStatus.textContent = ""; if (!bodyIn.value) { titleIn.value = before.title; bodyIn.value = before.body; } }
           C.err(e);
@@ -366,7 +384,7 @@
           const old = bodyIn.value;
           undoBody = old; undoBtn.hidden = false;
           bodyIn.value = part ? old.slice(0, a) + r.text + old.slice(b) : r.text;
-          markDirty(); updateWc(); checkOverlap();
+          markDirty(); updateWc(); checkOverlap(); checkRiskSoon();
           window.Shell.toast("已替换，不满意可以点「撤销 AI 修改」", "success", 4000);
         } catch (e) { close(); C.err(e); }
       }
@@ -477,7 +495,7 @@
           finally { btn.disabled = false; drawVersions(); }
         };
         return h("div", { class: "v-panel" },
-          h("div", { class: "editor-bar" }, C.platformTag(v.platform), C.overlapTag(v), C.rewriteTag(v), C.pushTag(v), h("span", { class: "spacer" }), info),
+          h("div", { class: "editor-bar" }, C.platformTag(v.platform), C.overlapTag(v), C.riskTag(v), C.rewriteTag(v), C.pushTag(v), h("span", { class: "spacer" }), info),
           t, b,
           h("div", { class: "editor-bar" }, C.field("状态", st), h("span", { class: "spacer" }),
             h("button", { class: "btn small", onclick: () => C.phonePreview({ title: t.value.trim(), body: b.value, platform: v.platform, cover: v.cover || "" }) }, "手机预览"),

@@ -201,7 +201,8 @@
     const bad = c.needsRewrite || (limit != null && c.overlap > limit);
     return h("span", { class: "ov-tag" + (bad ? " bad" : ""), title: "与参考原文的重合度" }, `重合 ${c.overlap}%`);
   }
-  const rewriteTag = (c) => (c && c.needsRewrite ? h("span", { class: "push-tag push-failed", title: "与参考原文重合度过高，改写后再推送" }, "需改写") : null);
+  const rewriteTag = (c) => (c && c.needsRewrite ? h("span", { class: "push-tag push-failed", title: c.riskLevel === "high" ? `有违规风险词：${(c.riskWords || []).join("、")}，改写后再推送` : "与参考原文重合度过高，改写后再推送" }, "需改写") : null);
+  const riskTag = (c) => (c && c.riskLevel ? h("span", { class: "ov-tag" + (c.riskLevel === "high" ? " bad" : ""), title: "违规风险词：" + (c.riskWords || []).join("、") }, c.riskLevel === "high" ? "违规风险" : "注意用词") : null);
   const SOURCE_NAMES = { wechat: "公众号", toutiao: "头条", baijiahao: "百家号", xiaohongshu: "小红书", douyin: "抖音", other: "其他" };
   const fmtCount = (n) => (!n ? "" : n >= 1e8 ? (n / 1e8).toFixed(1).replace(/\.0$/, "") + "亿" : n >= 1e4 ? (n / 1e4).toFixed(1).replace(/\.0$/, "") + "万" : String(n));
   const fmtAgo = (ts) => {
@@ -305,7 +306,7 @@
   window.Content = {
     phonePreview, pickImage,
     loadAccounts, currentAccount, currentAccountId, switchAccount, getAccounts: () => accounts.slice(), push, pushTag, PUSH_NAMES,
-    loadPlatformAccounts, getPlatformAccounts: () => platformAccounts.slice(), loggedInOf, accountPicker, overlapTag, rewriteTag, SOURCE_NAMES, fmtCount, fmtAgo, tabs,
+    loadPlatformAccounts, getPlatformAccounts: () => platformAccounts.slice(), loggedInOf, accountPicker, overlapTag, rewriteTag, riskTag, SOURCE_NAMES, fmtCount, fmtAgo, tabs,
     call, runAi, cancelTask, open, take, meta, field, selectEl, platformOptions, statusOptions, platformTag, statusTag,
     platformName, statusName, countWords, splitTitle, today, ymd, fmtDate, copy, err, onData, changed, save, remove, list,
     PLATFORM_NAMES, STATUS_NAMES,

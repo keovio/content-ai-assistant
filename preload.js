@@ -109,6 +109,7 @@ contextBridge.exposeInMainWorld("app", {
     webLogin: (platform) => ipcRenderer.invoke("discover:webLogin", platform),
     webStatus: (platform) => ipcRenderer.invoke("discover:webStatus", platform),
     overlap: (text, refId) => ipcRenderer.invoke("discover:overlap", text, refId),
+    risk: (text) => ipcRenderer.invoke("discover:risk", text),
     duplicate: (item) => ipcRenderer.invoke("discover:duplicate", item),
   },
   // 定时自动创作：status() 开关 / 下次运行时间 / 最近运行；runNow() 立即运行一次
