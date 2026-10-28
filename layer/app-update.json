@@ -1,0 +1,19 @@
+{
+  "version": "0.5.7",
+  "electron": "33.4.11",
+  "bootstrap": 1,
+  "sha256": "ea927c8b4e6edb7580053c1ecd6326b22ba5e4818b9fa9ebd217d1cfc4776d6e",
+  "size": 846167,
+  "asarUrl": "https://github.com/keovio/content-ai-assistant/releases/download/v0.5.7/app-update.asar",
+  "installers": {
+    "mac": {
+      "arm64": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-mac-arm64.dmg",
+      "x64": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-mac-x64.dmg"
+    },
+    "win": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-win-x64.exe",
+    "linux": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-linux-x64.AppImage"
+  },
+  "releaseUrl": "https://github.com/keovio/content-ai-assistant/releases/tag/v0.5.7",
+  "notes": "对标拆解批量栏：「直接推进草稿箱」改为「推送到草稿箱」，和平台选项之间加分隔线、标上「写好后：」，不再像一个平台",
+  "publishedAt": "2026-10-28T13:21:50.520Z"
+}
