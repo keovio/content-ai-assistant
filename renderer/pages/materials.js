@@ -26,6 +26,13 @@
       const kindFilter = C.selectEl([["", "全部类型"], ...Object.entries(KINDS)], "");
       const listBox = h("div", { class: "item-list" });
       const useBtn = h("button", { class: "btn small primary", disabled: true, onclick: useSelected }, "用选中的写稿");
+      const delSelBtn = h("button", { class: "btn small danger-ghost", disabled: true, onclick: deleteSelected }, "删除选中");
+      const allSel = h("input", { type: "checkbox", title: "全选" });
+      let shown = [];
+      allSel.addEventListener("change", () => { selected.clear(); if (allSel.checked) shown.forEach((m) => selected.add(m.id)); refresh(); });
+      const syncSel = () => {
+        allSel.checked = shown.length > 0 && shown.every((m) => selected.has(m.id));
+        allSel.indeterminate = selected.size > 0 && !allSel.checked; useBtn.disabled = delSelBtn.disabled = !selected.size; delSelBtn.textContent = selected.size ? `删除选中（${selected.size}）` : "删除选中"; };
       const fileIn = h("input", { type: "file", accept: "image/png,image/jpeg,image/webp,image/gif", multiple: true, hidden: true, onchange: upload });
       const upTitle = h("input", { class: "input", placeholder: "图片说明（配图时按它匹配，如：街角咖啡店门口）" });
       const upTags = h("input", { class: "input", placeholder: "标签，用空格或逗号分隔" });
@@ -46,8 +53,8 @@
             h("div", { class: "form" },
               h("p", { class: "muted small-text" }, "AI 配图时会先从图片素材里找说明相符的直接用，找不到再生成；AI 生成的图也会自动收进来。"),
               upTitle, upTags, h("div", { class: "actions" }, upBtn, fileIn))),
-          card({ title: "全部素材", icon: "folder", class: "mg-all", actions: [useBtn] },
-            h("div", { class: "toolbar" }, q, kindFilter), listBox))));
+          card({ title: "全部素材", icon: "folder", class: "mg-all", actions: [delSelBtn, useBtn] },
+            h("div", { class: "toolbar" }, h("label", { class: "check" }, allSel, "全选"), q, kindFilter), listBox))));
 
       q.addEventListener("input", window.Shell.debounce(refresh, 200));
       kindFilter.addEventListener("change", refresh);
@@ -86,17 +93,27 @@
       }
       function useSelected() { C.open("writer", { materialIds: [...selected] }); window.Shell.toast(`已在写稿页勾选 ${selected.size} 条素材`, "success"); }
 
+      async function deleteSelected() {
+        const ids = [...selected];
+        if (!ids.length) return;
+        if (!(await window.Shell.confirm(`删除选中的 ${ids.length} 条素材？删除后不能恢复。`, { okText: "删除", danger: true }))) return;
+        let ok = 0;
+        for (const id of ids) { try { await C.remove("materials", id); ok++; selected.delete(id); } catch (e) { C.err(e); } }
+        window.Shell.toast(`已删除 ${ok} 条素材`, ok === ids.length ? "success" : "error");
+        refresh();
+      }
       async function refresh() {
         try {
           let list = await C.list("materials", { q: q.value.trim() });
           if (kindFilter.value) list = list.filter((m) => m.kind === kindFilter.value);
           for (const id of [...selected]) if (!list.some((m) => m.id === id)) selected.delete(id);
-          useBtn.disabled = !selected.size;
+          shown = list;
+          syncSel();
           listBox.replaceChildren(...(list.length ? list.map(row) : [h("p", { class: "muted" }, q.value ? "没有搜到。" : "还没有素材。")]));
         } catch (e) { window.Shell.reportError(e); }
       }
       function row(m) {
-        const cb = h("input", { type: "checkbox", checked: selected.has(m.id), onchange: () => { if (cb.checked) selected.add(m.id); else selected.delete(m.id); useBtn.disabled = !selected.size; } });
+        const cb = h("input", { type: "checkbox", checked: selected.has(m.id), onchange: () => { if (cb.checked) selected.add(m.id); else selected.delete(m.id); syncSel(); } });
         return h("div", { class: "material" },
           h("div", { class: "material-head" }, cb, h("span", { class: "tag" }, KINDS[m.kind] || m.kind), h("b", {}, m.title || ""), h("span", { class: "spacer" }),
             h("span", { class: "muted small-text" }, C.fmtDate(m.updatedAt))),

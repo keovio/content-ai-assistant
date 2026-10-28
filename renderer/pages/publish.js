@@ -37,6 +37,7 @@
       const batchBtn = h("button", { class: "btn small primary", disabled: true, onclick: batchPush }, "推送选中");
       const imgBatchBtn = h("button", { class: "btn small", disabled: true, title: "按 设置 → 配图 给选中的稿子生成封面和文中配图（排队逐张生成）", onclick: batchImages }, "批量配图");
       const batchProg = h("span", { class: "muted small-text batch-prog", hidden: true });
+      const delBatchBtn = h("button", { class: "btn small danger-ghost", disabled: true, onclick: batchDelete }, "删除");
       let imgStop = null; // 正在批量配图时：停止函数
       const imgStopBtn = h("button", { class: "btn small danger", hidden: true, onclick: () => imgStop && imgStop() }, "停止配图");
       // 批量时每篇稿子的状态（列表会因数据变化重画，所以单独存着，画行时再贴上）
@@ -48,7 +49,7 @@
       let all = [];
       listView.append(card({ title: "", class: "lib-card" },
         h("div", { class: "toolbar lib-toolbar" }, q, pfSel, stSel, pushSel),
-        h("div", { class: "lib-head" }, h("label", { class: "check" }, allBox, "全选"), count, h("span", { class: "spacer" }), batchProg, imgStopBtn, imgBatchBtn, batchBtn),
+        h("div", { class: "lib-head" }, h("label", { class: "check" }, allBox, "全选"), count, h("span", { class: "spacer" }), batchProg, imgStopBtn, delBatchBtn, imgBatchBtn, batchBtn),
         listEl));
 
       const pushState = (c) => { const r = c.pushes && c.pushes[c.platform]; return r ? r.status : "none"; };
@@ -72,6 +73,8 @@
         batchBtn.disabled = !selected.size;
         batchBtn.textContent = selected.size ? `推送选中（${selected.size}）` : "推送选中";
         imgBatchBtn.disabled = !selected.size || imgRunning;
+        delBatchBtn.disabled = !selected.size || imgRunning;
+        delBatchBtn.textContent = selected.size ? `删除（${selected.size}）` : "删除";
         imgBatchBtn.textContent = selected.size ? `批量配图（${selected.size}）` : "批量配图";
         allBox.checked = rows.length > 0 && selected.size === rows.length;
         allBox.indeterminate = selected.size > 0 && selected.size < rows.length;
@@ -180,6 +183,16 @@
           batchProg.textContent = `配图结束：${ok} 篇完成${fail ? `，${fail} 篇失败` : ""}${tail}`;
           window.Shell.toast(`批量配图结束：${ok} 篇完成${fail ? `，${fail} 篇失败` : ""}${tail}`, fail || stopped ? "error" : "success", 6000);
         }
+      }
+      async function batchDelete() {
+        const ids = rows.filter((c) => selected.has(c.id)).map((c) => c.id);
+        if (!ids.length) return;
+        if (!(await window.Shell.confirm(`删除选中的 ${ids.length} 篇稿子？删除后不能恢复。`, { okText: "删除", danger: true }))) return;
+        let ok = 0;
+        for (const id of ids) { try { await C.remove("contents", id); ok++; selected.delete(id); opState.delete(id); } catch (e) { C.err(e); } }
+        drawBatch();
+        window.Shell.toast(`已删除 ${ok} 篇${ok < ids.length ? `，${ids.length - ok} 篇失败` : ""}`, ok === ids.length ? "success" : "error");
+        refresh();
       }
       async function batchPush() {
         const items = rows.filter((c) => selected.has(c.id));
