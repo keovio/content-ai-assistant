@@ -176,7 +176,7 @@ async function run(win) {
       rows.forEach((r) => { const cb = r.querySelector("input[type=checkbox]"); cb.checked = true; cb.dispatchEvent(new Event("change")); });
       [...document.querySelectorAll("#page-publish button")].find((b) => b.textContent.startsWith("批量配图")).click(); return rows.length;`);
     await waitFor(`const b = document.querySelector(".modal .btn.primary"); if (b) { b.click(); return true; } return null;`, 5000, "配图确认框");
-    await waitFor(`const t = document.querySelector("#page-publish .batch-prog"); return t && /配图完成/.test(t.textContent) ? t.textContent : null;`, 90000, "批量配图");
+    await waitFor(`const t = document.querySelector("#page-publish .batch-prog"); return t && /配图结束/.test(t.textContent) ? t.textContent : null;`, 90000, "批量配图");
     R.imgBatch = await js(`return { prog: document.querySelector("#page-publish .batch-prog").textContent, badges: [...document.querySelectorAll("#page-publish .lib-row .op-badge")].map((b) => b.className.replace("op-badge ", "") + ":" + b.textContent) };`);
     await shot("发布-批量配图");
     await nav("materials");

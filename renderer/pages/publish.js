@@ -35,8 +35,10 @@
       const pushSel = C.selectEl([["", "全部推送状态"], ["none", "未推送"], ["saved", "已存草稿"], ["unknown", "待确认"], ["failed", "推送失败"], ["rewrite", "需改写"]], "");
       const allBox = h("input", { type: "checkbox", title: "全选" });
       const batchBtn = h("button", { class: "btn small primary", disabled: true, onclick: batchPush }, "推送选中");
-      const imgBatchBtn = h("button", { class: "btn small", disabled: true, title: "按 设置 → 配图 给选中的稿子生成封面和文中配图（两篇同时进行）", onclick: batchImages }, "批量配图");
+      const imgBatchBtn = h("button", { class: "btn small", disabled: true, title: "按 设置 → 配图 给选中的稿子生成封面和文中配图（排队逐张生成）", onclick: batchImages }, "批量配图");
       const batchProg = h("span", { class: "muted small-text batch-prog", hidden: true });
+      let imgStop = null; // 正在批量配图时：停止函数
+      const imgStopBtn = h("button", { class: "btn small danger", hidden: true, onclick: () => imgStop && imgStop() }, "停止配图");
       // 批量时每篇稿子的状态（列表会因数据变化重画，所以单独存着，画行时再贴上）
       const opState = new Map(); // id → { text, state, tip }
       const count = h("span", { class: "muted small-text" });
@@ -46,7 +48,7 @@
       let all = [];
       listView.append(card({ title: "", class: "lib-card" },
         h("div", { class: "toolbar lib-toolbar" }, q, pfSel, stSel, pushSel),
-        h("div", { class: "lib-head" }, h("label", { class: "check" }, allBox, "全选"), count, h("span", { class: "spacer" }), batchProg, imgBatchBtn, batchBtn),
+        h("div", { class: "lib-head" }, h("label", { class: "check" }, allBox, "全选"), count, h("span", { class: "spacer" }), batchProg, imgStopBtn, imgBatchBtn, batchBtn),
         listEl));
 
       const pushState = (c) => { const r = c.pushes && c.pushes[c.platform]; return r ? r.status : "none"; };
@@ -135,32 +137,48 @@
         const items = rows.filter((c) => selected.has(c.id));
         if (!items.length) return;
         const has = items.filter((c) => c.cover || /cai-img:/.test(c.body || "")).length;
-        if (!(await window.Shell.confirm(`给选中的 ${items.length} 篇生成封面和文中配图？${has ? `其中 ${has} 篇已经有图，会重新配。` : ""}两篇同时进行，可以随时在「后台任务」里停止。`, { okText: "开始配图" }))) return;
+        if (!(await window.Shell.confirm(`给选中的 ${items.length} 篇生成封面和文中配图？${has ? `其中 ${has} 篇已经有图，会重新配。` : ""}生图接口一次只画一张，排队进行，可以随时点「停止配图」。`, { okText: "开始配图" }))) return;
         imgRunning = true; selected.clear(); drawBatch();
         items.forEach((c) => setOp(c.id, "排队中", "queued"));
         let n = 0, ok = 0, fail = 0;
         const prog = () => { batchProg.hidden = false; batchProg.textContent = `配图中 ${n}/${items.length}`; };
         prog();
         const queue = [...items];
+        const runningIds = new Set(); // 正在跑的后台任务 id
+        let stopped = "";
+        const stopAll = (why) => {
+          if (stopped) return;
+          stopped = why;
+          for (const c of queue.splice(0)) setOp(c.id, why === "rate" ? "限流，未配" : "已停止", "warn");
+          if (why === "user") for (const id of runningIds) C.cancelTask(id);
+        };
+        imgStop = () => stopAll("user");
+        imgStopBtn.hidden = false;
         const worker = async () => {
-          while (queue.length) {
+          while (queue.length && !stopped) {
             const c = queue.shift();
             setOp(c.id, "配图中", "running");
+            let tid = "";
             try {
               const r = await C.runAi("ai:images", { contentId: c.id }, { title: `配图「${(c.title || "").slice(0, 16)}」`,
-                onTask: (t) => { if (t.message && t.status === "running") setOp(c.id, t.message.length > 14 ? "配图中…" : t.message, "running", t.message); } });
-              if (!r) setOp(c.id, "已停止", "warn");
-              else if (r.failed && !r.count) { fail++; setOp(c.id, "配图失败", "failed"); }
+                onTask: (t) => { if (!tid) { tid = t.id; runningIds.add(tid); } if (t.message && t.status === "running") setOp(c.id, t.message.length > 14 ? "配图中…" : t.message, "running", t.message); } });
+              if (!r) { setOp(c.id, "已停止", "warn"); stopAll("user"); } // 在后台任务里取消了一篇 = 整批停下
+              else if (r.failed && !r.count && !r.cover) { fail++; setOp(c.id, "配图失败", "failed"); }
               else { ok++; setOp(c.id, `已配 ${r.count} 张${r.cover ? "+封面" : ""}${r.failed ? `，${r.failed} 张失败` : ""}`, r.failed ? "warn" : "done"); }
-            } catch (e) { fail++; setOp(c.id, "配图失败", "failed", e.message); window.Shell.reportError(e); }
+            } catch (e) {
+              fail++; setOp(c.id, "配图失败", "failed", e.message);
+              if (/太频繁|额度|余额|API Key|接口地址|模型/.test(e.message)) stopAll("rate"); // 换下一篇也一样会失败
+              window.Shell.reportError(e);
+            } finally { if (tid) runningIds.delete(tid); }
             n++; prog();
           }
         };
         try { await Promise.all([worker(), worker()]); }
         finally {
-          imgRunning = false; drawBatch();
-          batchProg.textContent = `配图完成：${ok} 篇${fail ? `，${fail} 篇失败` : ""}`;
-          window.Shell.toast(`批量配图结束：${ok} 篇完成${fail ? `，${fail} 篇失败` : ""}`, fail ? "error" : "success", 5000);
+          imgRunning = false; imgStop = null; imgStopBtn.hidden = true; drawBatch();
+          const tail = stopped === "user" ? "，已停止" : stopped === "rate" ? "，生图接口限流/额度不足，剩下的没配" : "";
+          batchProg.textContent = `配图结束：${ok} 篇完成${fail ? `，${fail} 篇失败` : ""}${tail}`;
+          window.Shell.toast(`批量配图结束：${ok} 篇完成${fail ? `，${fail} 篇失败` : ""}${tail}`, fail || stopped ? "error" : "success", 6000);
         }
       }
       async function batchPush() {

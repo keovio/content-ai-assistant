@@ -60,3 +60,31 @@ test("生图：智谱 / OpenAI 格式返回 url、硅基流动返回 images、b6
   assert.equal(img.fileOf("../etc/passwd"), "");
   assert.ok(img.fileOf(a.name).endsWith(a.name));
 });
+
+test("生图全局排队：同一时间只跑一张，429 限流会等一等再试", async () => {
+  const dir = require("fs").mkdtempSync(require("path").join(require("os").tmpdir(), "img-q-"));
+  let live = 0, peak = 0, calls = 0;
+  const png = Buffer.concat([Buffer.from([0x89]), Buffer.alloc(64)]).toString("base64");
+  const fetchImpl = async () => {
+    live++; peak = Math.max(peak, live); calls++;
+    await new Promise((r) => setTimeout(r, 5));
+    live--;
+    if (calls === 1) return { ok: false, status: 429, text: async () => JSON.stringify({ error: { message: "您的账户已达到速率限制" } }) };
+    return { ok: true, status: 200, text: async () => JSON.stringify({ data: [{ b64_json: png }] }) };
+  };
+  const waits = [];
+  const img = IMG.createImageClient({ fetchImpl, dir, getConfig: () => ({ provider: "zhipu", baseUrl: "https://x/api", model: "m", apiKey: "k" }), retryDelays: [1], sleepImpl: async (ms) => { waits.push(ms); } });
+  const r = await Promise.all([img.generate("a"), img.generate("b"), img.generate("c")]);
+  assert.equal(r.length, 3);
+  assert.equal(peak, 1);
+  assert.deepEqual(waits, [1]);
+});
+
+test("生图额度用完的 429 不重试", async () => {
+  const dir = require("fs").mkdtempSync(require("path").join(require("os").tmpdir(), "img-q-"));
+  let calls = 0;
+  const fetchImpl = async () => { calls++; return { ok: false, status: 429, text: async () => JSON.stringify({ error: { message: "余额不足" } }) }; };
+  const img = IMG.createImageClient({ fetchImpl, dir, getConfig: () => ({ provider: "zhipu", baseUrl: "https://x/api", model: "m", apiKey: "k" }), retryDelays: [1, 1], sleepImpl: async () => {} });
+  await assert.rejects(img.generate("a"), (e) => e.code === "IMAGE_RATE_LIMIT");
+  assert.equal(calls, 1);
+});
