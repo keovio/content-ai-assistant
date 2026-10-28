@@ -1,0 +1,19 @@
+{
+  "version": "0.4.2",
+  "electron": "33.4.11",
+  "bootstrap": 1,
+  "sha256": "dacde9f5d54bea9f5f925599e2c832dc4faa0178753a62056b529fc7b697a339",
+  "size": 756634,
+  "asarUrl": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.2/app-update.asar",
+  "installers": {
+    "mac": {
+      "arm64": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-mac-arm64.dmg",
+      "x64": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-mac-x64.dmg"
+    },
+    "win": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-win-x64.exe",
+    "linux": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-linux-x64.AppImage"
+  },
+  "releaseUrl": "https://github.com/keovio/content-ai-assistant/releases/tag/v0.4.2",
+  "notes": "关键词可不填，自动按今日头条热榜+百度热搜挑最火的；最多 20 个独立定时创作任务，可并发；AI 配图（智谱/硅基流动/OpenAI/自定义，独立生图设置，推草稿箱带图）；写稿自动套用拆解库里的写法；写稿后台并发、自动存草稿、AI 取标题；平台版本移到左栏；日志默认只看重点",
+  "publishedAt": "2026-10-28T11:17:21.447Z"
+}
