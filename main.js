@@ -273,7 +273,7 @@ function runSmokeTest() {
       }
       const tabs = ["find", "paste", "library"].every((t) => !!document.querySelector("#page-benchmark [data-tab='" + t + "']"));
       const flow = document.querySelectorAll("#page-home .flow-step").length;
-      const groups = !!document.getElementById("settings-group-custom") && !!document.getElementById("settings-group-system") && !!document.getElementById("settings-accounts");
+      const groups = document.querySelectorAll(".set-nav-group").length === 2 && !!document.getElementById("settings-accounts") && document.querySelectorAll(".set-nav-item").length >= 8;
       // 右侧运行日志面板能打开，外观设置能生效
       window.Shell.toggleLogDock(true);
       window.Shell.saveSettings({ background: "night", fontSize: 15 });

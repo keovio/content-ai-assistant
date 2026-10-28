@@ -49,7 +49,7 @@
       showKey();
 
       box.append(
-        row("服务商", "选一个预设会自动填好接口地址和常用模型；其他 OpenAI 兼容服务选「自定义」", provSel),
+        row("服务商", "选一个预设会自动填好接口地址和常用模型；其他 OpenAI 兼容服务选「自定义」", provSel, { stack: true }),
         row("接口地址", "OpenAI 兼容的 Base URL，例如 https://api.deepseek.com", textInput("aiBaseUrl", { placeholder: "https://…" }), { stack: true }),
         row("模型", "例如 deepseek-chat、qwen-plus、moonshot-v1-8k、glm-4-flash", textInput("aiModel", { placeholder: "模型名" })),
         row("API Key", keyState, h("div", { class: "actions" }, keyIn,
@@ -96,7 +96,7 @@
       showKey();
       box.append(
         h("p", { class: "card-desc" }, "写稿模型和生图分开设置。配图时 AI 先按文章写画面描述，再用这里的生图服务出图：封面存为稿子的封面，文中配图插进正文；推送草稿箱时连图一起填进去。下面的张数、尺寸、画风都可以不填，默认按文章内容自动判断。"),
-        row("服务商", "智谱 CogView-3-Flash 免费；硅基流动有 Kolors / FLUX；也可以填任何 OpenAI 兼容的 /images/generations 接口", provSel),
+        row("服务商", "智谱 CogView-3-Flash 免费；硅基流动有 Kolors / FLUX；也可以填任何 OpenAI 兼容的 /images/generations 接口", provSel, { stack: true }),
         row("接口地址", "", textInput("imageBaseUrl", { placeholder: "https://…" }), { stack: true }),
         row("模型", "例如 cogview-3-flash、Kwai-Kolors/Kolors、dall-e-3", textInput("imageModel", { placeholder: "模型名" })),
         row("API Key", keyState, h("div", { class: "actions" }, keyIn, h("button", { class: "btn", onclick: saveKey }, "保存"),
@@ -235,6 +235,10 @@
       const SRC = [["wechat", "公众号（搜狗）"], ["toutiao", "头条"], ["baijiahao", "百家号"], ["xiaohongshu", "小红书（需登录）"], ["douyin", "抖音（需登录）"]];
       const DAYS = [[1, "近 1 天"], [3, "近 3 天"], [7, "近 7 天"], [30, "近 30 天"], [0, "不限"]];
       let jobs = [], status = null, saveTimer = null;
+      // 展开的任务（记住）；只有一个任务时默认展开
+      let openIds = new Set();
+      try { openIds = new Set(JSON.parse(localStorage.getItem("auto.openJobs") || "[]")); } catch { /* ignore */ }
+      const rememberOpen = () => { try { localStorage.setItem("auto.openJobs", JSON.stringify([...openIds])); } catch { /* ignore */ } };
       const listBox = h("div", { class: "auto-jobs" });
       const historyBox = h("div", { class: "auto-status" });
       const addBtn = h("button", { class: "btn", onclick: addJob }, "＋ 新建定时任务");
@@ -249,13 +253,15 @@
 
       function save(now) {
         clearTimeout(saveTimer);
-        const go = async () => { try { jobs = await C.call(api.auto.saveJobs(jobs)); drawStatus(); } catch (e) { C.err(e); } };
+        // 保存后把结果合并回原来的对象（卡片里的输入框还引用着它们，整个替换会让改动丢失、开关弹回去）
+        const go = async () => { try { const saved = await C.call(api.auto.saveJobs(jobs)); jobs = saved.map((s) => Object.assign(jobs.find((x) => x.id === s.id) || {}, s)); drawStatus(); } catch (e) { C.err(e); } };
         if (now) go(); else saveTimer = setTimeout(go, 400);
       }
       function addJob() {
         const n = jobs.length + 1;
         if (n > 20) { window.Shell.toast("最多 20 个定时任务", "info"); return; }
         jobs.push({ id: "job" + Date.now().toString(36), name: `任务 ${n}`, enabled: false, times: "08:30", weekdays: "1,2,3,4,5,6,7", keywords: "", source: "wechat", days: 3, count: 2, targets: "wechat", push: false, images: false });
+        openIds.add(jobs[jobs.length - 1].id); rememberOpen();
         save(true); draw();
       }
       async function removeJob(j) {
@@ -265,7 +271,7 @@
       async function runJob(j, btn) {
         btn.disabled = true;
         try {
-          clearTimeout(saveTimer); jobs = await C.call(api.auto.saveJobs(jobs));
+          clearTimeout(saveTimer); const saved = await C.call(api.auto.saveJobs(jobs)); jobs = saved.map((s) => Object.assign(jobs.find((x) => x.id === s.id) || {}, s));
           const r = await C.call(api.auto.runNow(j.id));
           if (r && r.busy) window.Shell.toast(r.error, "info");
           else if (r && r.task) window.Shell.toast(`「${j.name}」已开始，进度在运行日志里`, "success");
@@ -290,11 +296,35 @@
         const nextLine = h("span", { class: "muted small-text job-next", "data-job": j.id });
         const runBtn = h("button", { class: "btn small", onclick: () => runJob(j, runBtn) }, "立即运行一次");
         const nameIn = inp("name", { placeholder: "任务名" }); nameIn.classList.add("job-name");
+        const isOpen = () => openIds.has(j.id);
+        const summary = h("div", { class: "job-summary muted small-text" });
+        const drawSummary = () => {
+          const t = validTimes(j.times);
+          const wd = String(j.weekdays || "").split(",").filter(Boolean);
+          const wdText = !wd.length || wd.length === 7 ? "每天" : wd.join(",") === "1,2,3,4,5" ? "工作日" : wd.map((d) => (WD.find((x) => x[0] === d) || [, d])[1]).join("、");
+          const src = (SRC.find((x) => x[0] === j.source) || [, j.source])[1].replace(/（.*）/, "");
+          const tg = String(j.targets || "").split(",").filter(Boolean).map((x) => C.PLATFORM_NAMES[x] || x).join("、") || "未选平台";
+          summary.textContent = `${t.length ? t.join("、") : "未设时间"} · ${wdText} · ${j.keywords ? j.keywords.slice(0, 20) : "今日热点"} · ${src}找 ${j.count} 篇 → ${tg}${j.images ? " · 配图" : ""}${j.push ? " · 推草稿箱" : ""}`;
+        };
+        drawSummary();
         const field = (label, el, hint) => h("div", { class: "job-field" }, h("div", { class: "job-label" }, label, hint ? h("span", { class: "muted small-text" }, "　", hint) : null), el);
-        return h("div", { class: "auto-job" + (j.enabled ? " on" : ""), "data-job": j.id },
-          h("div", { class: "job-head" }, sw("enabled", () => draw()), nameIn, nextLine, h("span", { class: "spacer" }), runBtn,
-            h("button", { class: "btn small ghost danger", onclick: () => removeJob(j) }, "删除")),
-          h("div", { class: "job-grid" },
+        const foldBtn = h("button", { class: "btn small ghost job-fold", title: "展开 / 收起", onclick: () => toggleOpen() }, isOpen() ? "收起" : "展开");
+        const grid = h("div", { class: "job-grid", hidden: !isOpen() });
+        const card = h("div", { class: "auto-job" + (j.enabled ? " on" : "") + (isOpen() ? " open" : ""), "data-job": j.id });
+        function toggleOpen() {
+          const o = grid.hidden;
+          if (o) openIds.add(j.id); else openIds.delete(j.id);
+          rememberOpen();
+          grid.hidden = !o; card.classList.toggle("open", o); foldBtn.textContent = o ? "收起" : "展开";
+        }
+        card.addEventListener("input", drawSummary); card.addEventListener("change", drawSummary);
+        const enableSw = sw("enabled", () => { card.classList.toggle("on", !!j.enabled); drawNext(); });
+        card.append(
+          h("div", { class: "job-head" }, enableSw, nameIn, nextLine, h("span", { class: "spacer" }), runBtn,
+            h("button", { class: "btn small ghost danger", onclick: () => removeJob(j) }, "删除"), foldBtn),
+          h("div", { class: "job-sub", onclick: () => { if (grid.hidden) toggleOpen(); } }, summary),
+          grid);
+        grid.append(
             field("时间", timesIn, timesHint),
             field("星期", checks("weekdays", WD), "不勾 = 每天"),
             field("关键词（可不填）", inp("keywords", { placeholder: "不填 = 按今日热点（头条热榜 + 百度热搜）挑最火的；例如：AI 工具, 职场效率" })),
@@ -303,7 +333,8 @@
             field("每次几篇", sel("count", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => [n, n + " 篇"]), Number)),
             field("写成哪些平台", checks("targets", Object.entries(C.PLATFORM_NAMES)), "第一个按骨架写原创，其余在它基础上改写"),
             field("生成配图", sw("images"), "按 设置 → 配图 生成封面和文中配图"),
-            field("自动推草稿箱", sw("push"), "用绑定当前运营账号的平台号")));
+            field("自动推草稿箱", sw("push"), "用绑定当前运营账号的平台号"));
+        return card;
       }
       function draw() {
         listBox.replaceChildren(...(jobs.length ? jobs.map(jobCard) : [h("div", { class: "empty" }, h("p", { class: "muted" }, "还没有定时任务。点「新建定时任务」开始。"))]));
@@ -330,6 +361,7 @@
       }
       async function load() {
         try { jobs = await C.call(api.auto.jobs()); } catch (e) { C.err(e); }
+        if (jobs.length === 1 && localStorage.getItem("auto.openJobs") == null) openIds.add(jobs[0].id);
         draw(); drawStatus();
       }
       C.onData((what) => { if (what === "auto") drawStatus(); });

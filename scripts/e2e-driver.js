@@ -173,10 +173,24 @@ async function run(win) {
     ]); return true;`);
   await nav("settings");
   await sleep(800);
-  await js(`document.getElementById("settings-platform-login").scrollIntoView(); return true;`);
+  await js(`window.Shell.openSettings("platform-login"); return true;`);
   await shot("设置-平台账号");
-  await js(`document.getElementById("settings-auto").scrollIntoView(); return true;`);
+  await js(`window.Shell.openSettings("auto"); return true;`);
   await shot("设置-定时自动创作");
+  // 0.5.1：开关能点（保存后不弹回）、卡片可折叠
+  R.toggle = await js(`const card = document.querySelector("#settings-auto .auto-job[data-job='jobB']"); const before = (await window.app.auto.jobs()).find((x) => x.id === "jobB").enabled;
+    card.querySelector(".job-head .switch .slider").click(); await new Promise((r) => setTimeout(r, 900));
+    card.querySelector(".job-head .switch .slider").click(); await new Promise((r) => setTimeout(r, 900));
+    card.querySelector(".job-head .switch .slider").click(); await new Promise((r) => setTimeout(r, 900));
+    const after = (await window.app.auto.jobs()).find((x) => x.id === "jobB").enabled;
+    const shown = card.querySelector(".job-head .switch input").checked;
+    const g = card.querySelector(".job-grid"); const wasHidden = g.hidden; card.querySelector(".job-fold").click(); const nowHidden = g.hidden;
+    return { before, after, shown, foldToggles: wasHidden !== nowHidden, summary: card.querySelector(".job-summary").textContent };`);
+  await shot("设置-定时任务折叠");
+  await js(`window.Shell.openSettings("images"); return true;`);
+  await sleep(300);
+  await shot("设置-配图");
+  R.settingsOverflow = await js(`return [...document.querySelectorAll("#page-settings .set-row")].filter((r) => r.scrollWidth > r.clientWidth + 2 || [...r.querySelectorAll("select,input")].some((x) => x.getBoundingClientRect().right > r.getBoundingClientRect().right + 2)).map((r) => (r.querySelector(".set-title") || r).textContent.slice(0, 20));`);
 
   // ---- 10. 立即运行一次自动创作：拆过的跳过，剩下的写成头条号并推草稿箱 ----
   const t = await js(`return (await window.app.auto.runNow("jobA")).task.id;`);

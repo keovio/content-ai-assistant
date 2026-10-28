@@ -134,7 +134,7 @@
     switcherDot.className = "acct-dot accent-" + ((cur && cur.color) || "blue");
   }
   switcherSel.addEventListener("change", () => {
-    if (switcherSel.value === "__manage") { drawSwitcher(); window.Shell.navigate("settings"); setTimeout(() => document.getElementById("settings-accounts")?.scrollIntoView({ behavior: "smooth" }), 150); return; }
+    if (switcherSel.value === "__manage") { drawSwitcher(); window.Shell.openSettings("accounts"); return; }
     switchAccount(switcherSel.value);
   });
   async function switchAccount(id) {

@@ -25,7 +25,7 @@
       const pfBox = h("div", { class: "kv-list" });
       const brandBox = h("div", { class: "kv-list" });
       const go = (id, payload) => () => C.open(id, payload);
-      const toSettings = (sec) => () => { window.Shell.navigate("settings"); setTimeout(() => document.getElementById("settings-" + sec)?.scrollIntoView({ behavior: "smooth" }), 150); };
+      const toSettings = (sec) => () => { window.Shell.openSettings(sec); };
       let hotTab = "toutiao";
       let hotData = null;
 

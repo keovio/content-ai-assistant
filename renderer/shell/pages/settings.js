@@ -266,34 +266,55 @@
     } },
   ];
 
+  // 打开设置并跳到某一类：Shell.openSettings("images")
+  let pending = "", showFn = null;
+  window.Shell.openSettings = (id) => {
+    if (showFn) showFn(id); else pending = id;
+    window.Shell.navigate("settings");
+  };
+
   window.Shell.registerPage({
     id: "settings", title: "设置", icon: "settings", section: "system", order: 30,
     async render(root, ctx) {
       root.classList.add("page-wide");
       root.append(h("header", { class: "page-head" }, h("div", {}, h("h1", {}, "设置"), h("p", { class: "sub" }, "修改立即生效并自动保存"))));
+      // 左侧分类导航，右侧一次只显示一类（不用从头滚到尾）
       const groups = {
-        custom: { title: "业务设置", desc: "AI、运营账号、平台和推送", body: window.Shell.modules() },
-        system: { title: "通用设置", desc: "外观、更新、日志和数据", body: window.Shell.modules() },
+        custom: { title: "业务设置", items: [] },
+        system: { title: "通用设置", items: [] },
       };
-      for (const [id, g] of Object.entries(groups)) {
-        g.body.classList.add("settings");
-        g.head = h("div", { class: "set-group-title", id: `settings-group-${id}` }, h("h2", {}, g.title), h("span", { class: "muted small-text" }, g.desc));
-        root.append(g.head, g.body);
-      }
+      const nav = h("nav", { class: "set-nav" });
+      const content = h("div", { class: "set-content settings" });
+      root.append(h("div", { class: "set-layout" }, nav, content));
       const c = { ...ctx, system: await api.system.info() };
+      const all = [];
       for (const sec of [...builtin.map((b) => ({ group: "system", ...b })), ...sections].sort((a, b) => (a.order ?? 50) - (b.order ?? 50))) {
-        const body = (groups[sec.group] || groups.custom).body;
         const box = h("div", { class: "set-group-body" });
         const tagEl = h("span", { class: "card-tag" });
         const drawTag = () => { const t = typeof sec.tag === "function" ? sec.tag(window.Shell.getSettings()) : sec.tag; tagEl.textContent = t || ""; tagEl.hidden = !t; };
         drawTag();
         if (typeof sec.tag === "function") window.Shell.onSettings(drawTag);
-        body.append(h("section", { class: "card module set-group", id: `settings-${sec.id}` },
-          h("header", { class: "card-head" }, h("h2", {}, sec.icon ? icon(sec.icon) : null, sec.title), tagEl), box));
+        const card = h("section", { class: "card module set-group", id: `settings-${sec.id}`, hidden: true },
+          h("header", { class: "card-head" }, h("h2", {}, sec.icon ? icon(sec.icon) : null, sec.title), tagEl), box);
+        content.append(card);
         try { await sec.render(box, c); } catch (err) { window.Shell.reportError(err); box.append(h("p", { class: "error" }, err.message)); }
-        if (!box.childElementCount) document.getElementById(`settings-${sec.id}`)?.remove();
+        if (!box.childElementCount) { card.remove(); continue; }
+        const btn = h("button", { class: "set-nav-item", "data-sec": sec.id, onclick: () => show(sec.id) }, sec.icon ? icon(sec.icon) : h("span", { class: "set-nav-dot" }), h("span", {}, sec.title));
+        (groups[sec.group] || groups.custom).items.push(btn);
+        all.push(sec.id);
       }
-      for (const g of Object.values(groups)) if (!g.body.childElementCount) { g.head.remove(); g.body.remove(); }
+      for (const g of Object.values(groups)) if (g.items.length) nav.append(h("div", { class: "set-nav-group" }, g.title), ...g.items);
+      function show(id, opts = {}) {
+        if (!all.includes(id)) id = all[0];
+        for (const el of content.children) el.hidden = el.id !== `settings-${id}`;
+        for (const b of nav.querySelectorAll(".set-nav-item")) b.classList.toggle("active", b.dataset.sec === id);
+        try { localStorage.setItem("settings.section", id); } catch { /* ignore */ }
+        if (!opts.keepScroll) root.scrollTop = 0;
+      }
+      let last = ""; try { last = localStorage.getItem("settings.section") || ""; } catch { /* ignore */ }
+      show(pending || last || all[0]);
+      pending = "";
+      showFn = show;
     },
   });
 })();
