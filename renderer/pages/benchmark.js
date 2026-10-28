@@ -193,40 +193,64 @@
         // 顶部进度：进度条 + 「进行中 2/5 · 当前在做什么」
         const fill = h("div", { class: "fill" });
         const pText = h("span", {}, "开始处理…");
-        const stopB = h("button", { class: "btn small ghost", onclick: () => { if (runId) C.cancelTask(runId); } }, "停止");
-        let runId = "";
+        // 每篇一个独立任务（任务中心里一条一条的，可以单独取消），同时跑 2 篇，其余排队
+        const running = new Map(); // url → taskId
+        const waiting = items.slice();
+        let stopped = false;
+        const stopAll = () => {
+          stopped = true;
+          for (const x of waiting.splice(0)) rowStatus(x.url, "已取消", "warn");
+          for (const id of running.values()) C.cancelTask(id);
+        };
+        const stopB = h("button", { class: "btn small ghost", onclick: stopAll }, "全部停止");
         batchStatus.replaceChildren(h("div", { class: "batch-progress" }, h("div", { class: "track" }, fill), pText, stopB));
         const setProg = (done, total, msg) => { fill.style.width = `${total ? Math.round((done / total) * 100) : 0}%`; pText.textContent = `进行中 ${done}/${total}${msg ? " · " + msg : ""}`; };
         setProg(0, items.length);
+        // 每行一个「取消」：排队中的直接移出队列，进行中的取消它的任务
+        const cancelBtns = new Map();
+        for (const x of items) {
+          const el = rowOf(x.url); if (!el) continue;
+          const b = h("button", { class: "btn small ghost op-cancel", onclick: () => {
+            const qi = waiting.indexOf(x);
+            if (qi >= 0) { waiting.splice(qi, 1); rowStatus(x.url, "已取消", "warn"); b.remove(); return; }
+            const id = running.get(x.url); if (id) { C.cancelTask(id); b.disabled = true; b.textContent = "取消中…"; }
+          } }, "取消");
+          el.querySelector(".lib-actions").append(b); cancelBtns.set(x.url, b);
+        }
+        let ok = 0, dup = 0, fail = 0, cancelled = 0, n = 0, written = 0, pushed = 0, rewrite = 0;
+        const one = async (x) => {
+          rowStatus(x.url, write ? "开始" : "拆解中", "running");
+          try {
+            let r;
+            if (write) {
+              r = await C.runAi("discover:batch", { items: [x], targets, push, images: imgChk.checked, platform: pfSel.value, keyword: x.keyword || kwIn.value.trim() }, {
+                title: `拆解并创作「${x.title.slice(0, 16)}」`, onTask: (t) => {
+                  running.set(x.url, t.id);
+                  const d = t.detail && t.detail.kind === "batch" ? t.detail : null;
+                  if (d) for (const y of d.items) rowStatus(y.url, y.stage, y.state, y.error);
+                  setProg(n, items.length, t.message);
+                } });
+              if (!r) { cancelled++; rowStatus(x.url, "已取消", "warn"); return; }
+              const it = (r.items || [])[0] || {};
+              const st = it.status || "失败";
+              written += r.written || 0; pushed += r.pushed || 0; rewrite += r.rewrite || 0;
+              if (st === "拆过了") dup++; else if (st === "失败") fail++; else ok++;
+              rowStatus(x.url, it.error && st !== "失败" ? `${st}，推送失败` : st, st === "失败" ? "failed" : (it.error || st === "需改写") ? "warn" : "done", it.error);
+            } else {
+              r = await C.runAi("discover:breakdown", { item: x, keyword: x.keyword }, { title: `拆解「${x.title.slice(0, 16)}」`, onTask: (t) => { running.set(x.url, t.id); } });
+              if (!r) { cancelled++; rowStatus(x.url, "已取消", "warn"); return; }
+              if (r.duplicate) { dup++; rowStatus(x.url, "拆过了", "done"); } else { ok++; rowStatus(x.url, "已拆解", "done"); }
+            }
+          } catch (e) { fail++; rowStatus(x.url, "失败", "failed", e.message); }
+          finally { running.delete(x.url); n++; setProg(n, items.length); const b = cancelBtns.get(x.url); if (b) b.remove(); }
+        };
         try {
-          let r;
-          if (write) {
-            r = await C.runAi("discover:batch", { items, targets, push, images: imgChk.checked, platform: pfSel.value, keyword: kwIn.value.trim() }, {
-              title: `批量拆解并创作（${items.length} 篇）`, onTask: (t) => {
-                runId = t.id;
-                const d = t.detail && t.detail.kind === "batch" ? t.detail : null;
-                if (d) for (const x of d.items) rowStatus(x.url, x.stage, x.state, x.error);
-                setProg(d ? d.done : 0, items.length, t.message);
-              } });
-            if (r && Array.isArray(r.items)) for (const x of r.items) {
-              const st = x.status || "失败";
-              rowStatus(x.url, x.error && st !== "失败" ? `${st}，推送失败` : st, st === "失败" ? "failed" : (x.error || st === "需改写") ? "warn" : "done", x.error);
-            }
-          } else {
-            let ok = 0, dup = 0, fail = 0, n = 0;
-            for (const x of items) {
-              rowStatus(x.url, "拆解中", "running");
-              setProg(n, items.length, `拆解「${x.title.slice(0, 20)}」`);
-              try {
-                const one = await C.runAi("discover:breakdown", { item: x, keyword: x.keyword }, { title: `拆解「${x.title.slice(0, 16)}」`, onTask: (t) => { runId = t.id; } });
-                if (!one) { rowStatus(x.url, "已停止", "warn"); break; }
-                if (one.duplicate) { dup++; rowStatus(x.url, "拆过了", "done"); } else { ok++; rowStatus(x.url, "已拆解", "done"); }
-              } catch (e) { fail++; rowStatus(x.url, "失败", "failed", e.message); window.Shell.reportError(e); }
-              n++;
-            }
-            for (const x of items) { const el = rowOf(x.url); if (el && el.classList.contains("op-queued")) rowStatus(x.url, "未处理", "warn"); }
-            r = { summary: `拆解 ${ok} 篇${dup ? `，${dup} 篇拆过了` : ""}${fail ? `，${fail} 篇失败` : ""}` };
-          }
+          const worker = async () => { while (!stopped && waiting.length) await one(waiting.shift()); };
+          await Promise.all(Array.from({ length: Math.min(2, items.length) }, worker));
+          for (const b of cancelBtns.values()) b.remove();
+          const r = stopped && !ok && !dup && !fail ? null : { summary: write
+            ? `写好 ${ok} 篇（共 ${written} 稿${pushed ? `，推送 ${pushed} 稿` : ""}${rewrite ? `，${rewrite} 稿需改写` : ""}）${dup ? `，${dup} 篇拆过了` : ""}${fail ? `，${fail} 篇失败` : ""}${cancelled ? `，${cancelled} 篇已取消` : ""}`
+            : `拆解 ${ok} 篇${dup ? `，${dup} 篇拆过了` : ""}${fail ? `，${fail} 篇失败` : ""}${cancelled ? `，${cancelled} 篇已取消` : ""}` };
           if (!r) {
             for (const x of items) { const el = rowOf(x.url); if (el && (el.classList.contains("op-queued") || el.classList.contains("op-running"))) rowStatus(x.url, "已停止", "warn"); }
             batchStatus.textContent = "已停止"; return;
@@ -240,7 +264,7 @@
           batchStatus.textContent = "出错了：" + e.message; C.err(e);
         } finally {
           lockRows(urls, false);
-          for (const u of urls) { const el = rowOf(u); if (el && (el.classList.contains("op-done") || el.classList.contains("op-warn") && !/已停止|未处理/.test(el.querySelector(".op-badge").textContent))) finishRow(u); }
+          for (const u of urls) { const el = rowOf(u); if (el && (el.classList.contains("op-done") || el.classList.contains("op-warn") && !/已停止|未处理|已取消/.test(el.querySelector(".op-badge").textContent))) finishRow(u); }
           drawBatch();
         }
       }
