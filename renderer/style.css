@@ -896,3 +896,17 @@ button.stat:hover { border-color: var(--primary); }
 .growth-chart text.lbl.today { fill: var(--primary); font-weight: 600; }
 .growth-chart text.lbl.future { opacity: .45; }
 .growth-empty { margin: 4px 0; }
+
+/* 0.5.6 账号数据按单个号看：点表格一行切换增长图 */
+.stats-table tbody tr { cursor: pointer; }
+.stats-table tbody tr:hover td { background: var(--surface-2); }
+.stats-table tbody tr.stat-on td { background: var(--primary-soft); }
+.growth-acc { width: auto; max-width: 220px; padding-top: 3px; padding-bottom: 3px; font-size: 12px; }
+.growth-acc-name { font-size: 13px; font-weight: 600; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 0.5.6 选题批量操作 */
+.topic-batch { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 6px 10px; margin-bottom: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); }
+.topic-batch[hidden] { display: none; }
+.topic-all { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
+.topic-head .topic-check { margin: 0 2px 0 0; flex: none; }
+.topic.selected { outline: 2px solid var(--primary); outline-offset: -1px; }

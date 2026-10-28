@@ -143,6 +143,28 @@ async function run(win) {
     R.reuse = await js(`const src = (await window.app.store.list("contents")).find((c) => c.id === ${JSON.stringify(goodId)}); const c = await window.app.store.upsert("contents", { title: src.title + "（复用测试）", body: src.body.replace(/^!\\[.*\\]\\(cai-img:.*\\)$/gm, ""), platform: src.platform, status: "draft" }); const r = await window.Content.runAi("ai:images", { contentId: c.item.id }); return { count: r.count, reused: r.reused };`);
     const TINY = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
     R.upload = await js(`const r = await window.app.images.import({ data: ${JSON.stringify(TINY)}, fileName: "街角咖啡店.png", tags: "咖啡 门店" }); return { kind: r.kind, title: r.title, image: !!r.image };`);
+    // 0.5.6 选题批量操作：生成 → 全选 → 批量收藏 → 已收藏里批量加入日历
+    await nav("topics");
+    await js(`document.querySelector("#page-topics .writer-grid input.input").value = "职场副业"; [...document.querySelectorAll("#page-topics button")].find((b) => b.textContent === "生成选题").click(); return true;`);
+    await waitFor(`return document.querySelectorAll("#page-topics #topic-results .topic").length >= 3 || null;`, 30000, "生成选题");
+    R.topicBatch = await js(`const bars = document.querySelectorAll("#page-topics .topic-batch"); const bar = bars[0];
+      const out = { barShown: !bar.hidden, disabled: bar.querySelector('[data-batch="收藏"]').disabled };
+      bar.querySelector(".topic-all input").click();
+      out.count = bar.querySelector(".muted").textContent;
+      bar.querySelector('[data-batch="收藏"]').click();
+      await new Promise((r) => setTimeout(r, 1200));
+      out.saved = (await window.app.store.list("topics")).length;
+      out.starred = [...document.querySelectorAll("#page-topics #topic-results .topic button")].filter((b) => b.textContent === "已收藏").length;
+      return out;`);
+    await shot("选题-批量收藏");
+    R.topicBatch2 = await js(`[...document.querySelectorAll("#page-topics .segmented button")].find((b) => b.textContent.startsWith("已收藏")).click();
+      await new Promise((r) => setTimeout(r, 300));
+      const bar = document.querySelectorAll("#page-topics .topic-batch")[1];
+      const before = (await window.app.store.list("contents")).filter((c) => c.status === "idea").length;
+      bar.querySelector(".topic-all input").click();
+      bar.querySelector('[data-batch="加入日历"]').click();
+      await new Promise((r) => setTimeout(r, 1200));
+      return { shown: !bar.hidden, added: (await window.app.store.list("contents")).filter((c) => c.status === "idea").length - before };`);
     await nav("materials");
     await js(`window.Shell.toggleLogDock(false); return true;`);
     await sleep(1200);
@@ -227,7 +249,7 @@ async function run(win) {
   // 0.5.5 增长图：本日（近 7 天）有柱子，切到本周 / 本月也能画
   R.growthUi = await js(`const g = document.querySelector("#home-growth"); if (!g) return null;
     const bars = () => g.querySelectorAll(".growth-chart rect.gbar:not(.none)").length;
-    const out = { day: bars(), today: g.querySelectorAll(".growth-chart rect.gbar.today").length };
+    const out = { day: bars(), today: g.querySelectorAll(".growth-chart rect.gbar.today").length, acc: document.querySelectorAll("#home-stats .stats-table tr.stat-on").length, sum: g.querySelector(".growth-sum b").textContent };
     g.querySelector('[data-period="month"]').click(); out.month = g.querySelectorAll(".growth-chart text.lbl").length > 4 && bars();
     g.querySelector('[data-metric="income"]').click(); out.income = bars();
     g.querySelector('[data-period="day"]').click(); g.querySelector('[data-metric="fans"]').click();
@@ -261,7 +283,7 @@ async function run(win) {
     && R.tech.items >= 3 && /自动/.test(R.tech.hint)
     && R.stats.rows.length === 1 && R.stats.rows[0].fans === 12345 && R.stats.rows[0].reads === 67000 && R.stats.rows[0].income === 88.5 && !R.stats.rows[0].error
     && R.stats.totals.fans === 12345 && R.layout.cols === 3 && !R.layout.overlap && R.layout.statsWide && R.layout.hotRight && R.layout.row2 && R.layout.row3
-    && R.layout.statsRows === 1 && R.layout.oldCards === 0 && R.layout.cards.length === 7 && R.layoutNarrow === 1 && R.stats.growth && R.stats.growth.day.fans === 145 && R.stats.growth.day.income === 3.5 && R.growthUi && R.growthUi.day >= 3 && R.growthUi.today === 1 && R.growthUi.month >= 3 && R.growthUi.income >= 3 && R.matLayout && R.matLayout.cols === 3 && R.matLayout.leftStack && R.matLayout.allRight
+    && R.layout.statsRows === 1 && R.layout.tiles.length === 0 && R.growthUi.acc === 1 && R.layout.oldCards === 0 && R.layout.cards.length === 7 && R.layoutNarrow === 1 && R.stats.growth && R.stats.growth.day.fans === 145 && R.stats.growth.day.income === 3.5 && R.growthUi && R.growthUi.day >= 3 && R.growthUi.today === 1 && R.growthUi.month >= 3 && R.growthUi.income >= 3 && R.topicBatch && R.topicBatch.barShown && R.topicBatch.disabled && R.topicBatch.saved >= 3 && R.topicBatch.starred === 3 && R.topicBatch.count.startsWith("已选 3") && R.topicBatch2.shown && R.topicBatch2.added >= 3 && R.matLayout && R.matLayout.cols === 3 && R.matLayout.leftStack && R.matLayout.allRight
     && R.writer.warn && R.pasteDup.duplicate === true && R.pasteNew.duplicate === false && R.breakdowns.every((b) => b.topics === 3);
   console.log("E2E RESULT " + JSON.stringify(R));
   console.log(ok ? "E2E OK" : "E2E FAIL");

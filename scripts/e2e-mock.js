@@ -67,6 +67,8 @@ function aiReply(messages) {
       topics: [{ title: `上班族用 AI 提效的 3 个习惯${t.includes("照抄") ? "（照抄）" : ""}`, angle: "从每天省下的时间切入" }, { title: "宝妈用 AI 做副业的 3 条路", angle: "时间碎片化" }, { title: "学生用 AI 赚第一笔钱", angle: "低成本试错" }],
     });
   }
+  // 0.5.6：选题页「生成选题」
+  if (/^请给出 \d+ 个选题/.test(u)) return JSON.stringify([{ title: "上班族午休 20 分钟能做的副业", angle: "碎片时间", hook: "午休别刷手机了", platform: "toutiao" }, { title: "AI 写周报的 3 个提示词", angle: "直接给模板", hook: "周报十分钟搞定", platform: "wechat" }, { title: "下班后学剪辑值不值", angle: "算一笔账", hook: "三个月回本吗", platform: "douyin" }]);
   if (/写一篇完整内容/.test(u)) {
     if (/照抄/.test(u)) return "# 早起的人到底赢在哪里\n\n" + ARTICLES["7002"].body; // 故意照抄 → 重合度 100%
     return "# 上班族用 AI 提效的 3 个习惯，最后一个最容易坚持\n\n你以为提效要靠熬夜加班？换个思路，把重复的活交给 AI。\n\n## 习惯一：早上十分钟让 AI 排日程\n把待办丢给它，按轻重缓急排好。\n\n## 习惯二：会议纪要交给 AI\n录音转文字再总结，省下整理的半小时。\n\n## 习惯三：每周五让 AI 帮你复盘\n这是最容易坚持的一个：只要回答三个问题。\n\n从今天开始，先试一个。";

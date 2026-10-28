@@ -67,12 +67,9 @@
             h("div", { class: "actions" }, h("button", { class: "btn small", onclick: toSettings("platform-login") }, "去登录")));
           return;
         }
-        const t = d.totals || {};
-        const tile = (label, val, sub) => h("div", { class: "stat-tile" }, h("span", { class: "muted small-text" }, label), h("b", {}, val), sub ? h("span", { class: "muted small-text" }, sub) : null);
-        const totals = h("div", { class: "stat-tiles" },
-          tile("粉丝合计", fmtNum(t.fans), `${t.accounts} 个号`),
-          tile("阅读合计", fmtNum(t.reads)),
-          tile("收益合计", fmtMoney(t.income), t.failed ? `${t.failed} 个号读取失败` : ""));
+        // 0.5.6：不显示合计，只看各个号自己的数据
+        statsRows = rows;
+        if (!rows.some((a) => a.id === growthState.account)) growthState.account = (rows.find((a) => a.loggedIn) || rows[0]).id;
         const when = (s) => (s.at ? C.fmtAgo(s.at) : "—");
         const table = h("table", { class: "stats-table" },
           h("thead", {}, h("tr", {}, ...["平台", "账号", "粉丝", "阅读", "收益", "更新时间"].map((x) => h("th", {}, x)))),
@@ -82,7 +79,9 @@
             const state = !a.loggedIn ? h("span", { class: "stat-err", title: "登录已失效" }, "登录失效")
               : s.error ? h("span", { class: "stat-err", title: s.error }, "读取失败")
               : !s.at ? h("span", { class: "muted" }, d.running ? "读取中…" : "等待读取") : null;
-            return h("tr", { class: bad ? "stat-bad" : "", title: s.error || "" },
+            // 点一行 = 下面增长图切到这个号
+            return h("tr", { class: (bad ? "stat-bad" : "") + (a.id === growthState.account ? " stat-on" : ""), title: s.error || "点一下看这个号的增长", dataset: { acc: a.id },
+              onclick: () => { growthState.account = a.id; drawStats(d); } },
               h("td", {}, C.platformTag(a.platform)),
               h("td", { class: "stat-name" }, a.name),
               h("td", { class: "num" }, fmtNum(s.fans)),
@@ -90,25 +89,30 @@
               h("td", { class: "num" }, fmtMoney(s.income)),
               h("td", { class: "stat-when" }, state || "", state && s.at ? " · " : "", s.at ? h("span", { class: "muted", title: C.fmtDate(s.at) }, when(s)) : ""));
           })));
-        statsBox.replaceChildren(totals, growthBox(d.growth), h("div", { class: "stats-scroll" }, table));
+        statsBox.replaceChildren(h("div", { class: "stats-scroll" }, table), growthBox());
       }
       // 0.5.5 增长：本日（近 7 天）/ 本周 / 本月，柱状图看每天涨了多少
-      const growthState = { period: "day", metric: "fans" };
-      let lastGrowth = null;
+      const growthState = { period: "day", metric: "fans", account: "" };
+      let statsRows = [];
       const PERIODS = [["day", "本日"], ["week", "本周"], ["month", "本月"]];
       const METRICS = [["fans", "粉丝"], ["reads", "阅读"], ["income", "收益"]];
       const fmtDelta = (k, n) => (n == null ? "—" : (n > 0 ? "+" : n < 0 ? "−" : "") + (k === "income" ? "¥" + Math.abs(n).toFixed(2) : fmtNum(Math.abs(n))));
-      function growthBox(g) {
-        lastGrowth = g || lastGrowth;
+      function growthBox() {
         const box = h("div", { class: "growth", id: "home-growth" });
         drawGrowth(box);
         return box;
       }
       function drawGrowth(box) {
-        const g = lastGrowth && lastGrowth[growthState.period];
+        const acc = statsRows.find((a) => a.id === growthState.account);
+        const g = acc && acc.growth && acc.growth[growthState.period];
         const seg = (list, key) => h("div", { class: "segmented small" }, ...list.map(([id, label]) =>
           h("button", { class: growthState[key] === id ? "active" : "", dataset: { [key]: id }, onclick: () => { growthState[key] = id; drawGrowth(box); } }, label)));
-        const head = h("div", { class: "growth-head" }, seg(PERIODS, "period"), h("span", { class: "spacer" }), seg(METRICS, "metric"));
+        // 哪个号：只有一个号时直接显示名字
+        const accPick = statsRows.length > 1
+          ? h("select", { class: "input small growth-acc", onchange: (e) => { growthState.account = e.target.value; drawGrowth(box); } },
+            ...statsRows.map((a) => h("option", { value: a.id, selected: a.id === growthState.account }, `${C.platformName(a.platform)} · ${a.name}`)))
+          : h("span", { class: "growth-acc-name" }, acc ? acc.name : "");
+        const head = h("div", { class: "growth-head" }, accPick, seg(PERIODS, "period"), h("span", { class: "spacer" }), seg(METRICS, "metric"));
         if (!g) { box.replaceChildren(head, h("p", { class: "muted small-text" }, "还没有数据。")); return; }
         const label = PERIODS.find((x) => x[0] === growthState.period)[1];
         const sums = h("div", { class: "growth-sums" }, ...METRICS.map(([k, name]) =>
