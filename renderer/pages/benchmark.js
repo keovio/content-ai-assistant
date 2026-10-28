@@ -141,6 +141,23 @@
         allBox.indeterminate = picked.size > 0 && picked.size < results.length;
       }
       allBox.addEventListener("change", () => { picked.clear(); if (allBox.checked) results.forEach((x) => picked.add(x.url)); for (const cb of resultList.querySelectorAll(".lib-row input[type=checkbox]")) cb.checked = allBox.checked; drawBatch(); });
+      // 批量时每一行的状态徽标：排队中 / 拆解中 / 写稿中 / 已写好 / 失败…
+      const rowOf = (url) => [...resultList.children].find((r) => r.dataset.url === url);
+      function rowStatus(url, text, state, tip = "") {
+        const el = rowOf(url); if (!el) return;
+        let b = el.querySelector(".op-badge");
+        if (!b) { b = h("span", { class: "op-badge" }); el.querySelector(".lib-actions").prepend(b); }
+        b.className = `op-badge ${state}`; b.textContent = text; b.title = tip || text;
+        for (const k of ["queued", "running", "done", "failed", "warn"]) el.classList.toggle(`op-${k}`, k === state);
+      }
+      // 处理完的行留在列表里显示结果（不再能勾选），不再算进「全选」
+      function finishRow(url) {
+        results = results.filter((x) => x.url !== url); picked.delete(url);
+        const el = rowOf(url); if (!el) return;
+        const cb = el.querySelector("input[type=checkbox]"); if (cb) { cb.checked = false; cb.disabled = true; }
+        const btn = el.querySelector(".lib-actions .btn"); if (btn) btn.hidden = true;
+      }
+      const lockRows = (urls, on) => { for (const u of urls) { const el = rowOf(u); if (!el) continue; for (const x of el.querySelectorAll("input[type=checkbox], .lib-actions .btn")) x.disabled = on; } };
       const removeRow = (url) => { results = results.filter((x) => x.url !== url); picked.delete(url); const el = [...resultList.children].find((r) => r.dataset.url === url); if (el) el.remove(); drawBatch(); };
 
       async function breakdownItem(x, btn) {
@@ -162,29 +179,62 @@
         const push = write && pushChk.checked;
         if (push && !(await window.Shell.confirm(`拆解 ${items.length} 篇，写成 ${targets.map(C.platformName).join("、")}，并推送到草稿箱（只存草稿、不发布；重合度超过上限的不推送）？`, { okText: "开始" }))) return;
         batchBtn.disabled = onlyBtn.disabled = true;
-        batchStatus.textContent = "开始处理…";
+        const urls = items.map((x) => x.url);
+        lockRows(urls, true);
+        items.forEach((x) => rowStatus(x.url, "排队中", "queued"));
+        // 顶部进度：进度条 + 「进行中 2/5 · 当前在做什么」
+        const fill = h("div", { class: "fill" });
+        const pText = h("span", {}, "开始处理…");
+        const stopB = h("button", { class: "btn small ghost", onclick: () => { if (runId) C.cancelTask(runId); } }, "停止");
+        let runId = "";
+        batchStatus.replaceChildren(h("div", { class: "batch-progress" }, h("div", { class: "track" }, fill), pText, stopB));
+        const setProg = (done, total, msg) => { fill.style.width = `${total ? Math.round((done / total) * 100) : 0}%`; pText.textContent = `进行中 ${done}/${total}${msg ? " · " + msg : ""}`; };
+        setProg(0, items.length);
         try {
           let r;
           if (write) {
             r = await C.runAi("discover:batch", { items, targets, push, images: imgChk.checked, platform: pfSel.value, keyword: kwIn.value.trim() }, {
-              title: `批量拆解并创作（${items.length} 篇）`, onTask: (t) => { if (t.message) batchStatus.textContent = t.message; } });
-          } else {
-            let ok = 0, dup = 0;
-            for (const x of items) {
-              batchStatus.textContent = `拆解「${x.title.slice(0, 20)}」…`;
-              try { const one = await C.runAi("discover:breakdown", { item: x, keyword: x.keyword }, { title: `拆解「${x.title.slice(0, 16)}」` }); if (one) { if (one.duplicate) dup++; else ok++; } }
-              catch (e) { C.err(e); }
+              title: `批量拆解并创作（${items.length} 篇）`, onTask: (t) => {
+                runId = t.id;
+                const d = t.detail && t.detail.kind === "batch" ? t.detail : null;
+                if (d) for (const x of d.items) rowStatus(x.url, x.stage, x.state, x.error);
+                setProg(d ? d.done : 0, items.length, t.message);
+              } });
+            if (r && Array.isArray(r.items)) for (const x of r.items) {
+              const st = x.status || "失败";
+              rowStatus(x.url, x.error && st !== "失败" ? `${st}，推送失败` : st, st === "失败" ? "failed" : (x.error || st === "需改写") ? "warn" : "done", x.error);
             }
-            r = { summary: `拆解 ${ok} 篇${dup ? `，${dup} 篇拆过了` : ""}` };
+          } else {
+            let ok = 0, dup = 0, fail = 0, n = 0;
+            for (const x of items) {
+              rowStatus(x.url, "拆解中", "running");
+              setProg(n, items.length, `拆解「${x.title.slice(0, 20)}」`);
+              try {
+                const one = await C.runAi("discover:breakdown", { item: x, keyword: x.keyword }, { title: `拆解「${x.title.slice(0, 16)}」`, onTask: (t) => { runId = t.id; } });
+                if (!one) { rowStatus(x.url, "已停止", "warn"); break; }
+                if (one.duplicate) { dup++; rowStatus(x.url, "拆过了", "done"); } else { ok++; rowStatus(x.url, "已拆解", "done"); }
+              } catch (e) { fail++; rowStatus(x.url, "失败", "failed", e.message); window.Shell.reportError(e); }
+              n++;
+            }
+            for (const x of items) { const el = rowOf(x.url); if (el && el.classList.contains("op-queued")) rowStatus(x.url, "未处理", "warn"); }
+            r = { summary: `拆解 ${ok} 篇${dup ? `，${dup} 篇拆过了` : ""}${fail ? `，${fail} 篇失败` : ""}` };
           }
-          if (!r) { batchStatus.textContent = "已停止"; return; }
+          if (!r) {
+            for (const x of items) { const el = rowOf(x.url); if (el && (el.classList.contains("op-queued") || el.classList.contains("op-running"))) rowStatus(x.url, "已停止", "warn"); }
+            batchStatus.textContent = "已停止"; return;
+          }
           batchStatus.replaceChildren(h("span", {}, "完成：" + r.summary + "  "),
             write ? h("button", { class: "btn small ghost", onclick: () => C.open("publish", { view: "list" }) }, "去发布页看稿子") : null,
             h("button", { class: "btn small ghost", onclick: () => tabBar.set("library") }, "看拆解库"));
-          items.forEach((x) => removeRow(x.url));
           C.changed("breakdowns"); C.changed("contents");
-        } catch (e) { batchStatus.textContent = ""; C.err(e); }
-        finally { drawBatch(); }
+        } catch (e) {
+          for (const x of items) { const el = rowOf(x.url); if (el && !el.classList.contains("op-done")) rowStatus(x.url, "失败", "failed", e.message); }
+          batchStatus.textContent = "出错了：" + e.message; C.err(e);
+        } finally {
+          lockRows(urls, false);
+          for (const u of urls) { const el = rowOf(u); if (el && (el.classList.contains("op-done") || el.classList.contains("op-warn") && !/已停止|未处理/.test(el.querySelector(".op-badge").textContent))) finishRow(u); }
+          drawBatch();
+        }
       }
 
       // ================= 粘贴拆解 =================

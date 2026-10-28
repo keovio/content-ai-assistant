@@ -95,3 +95,18 @@ test("保留最近 N 个已结束任务；clearFinished；写日志", async () =
   assert.equal(tm.list().length, 0);
   assert.ok(logger.entries().some((e) => e.scope === "task" && /快任务 完成/.test(e.message)));
 });
+
+test("detail：批量任务的逐项状态随进度推给界面", async () => {
+  const tm = createTaskManager({ throttleMs: 0 });
+  tm.register("multi", async (_p, ctx) => {
+    ctx.detail({ kind: "batch", done: 0, total: 2, items: [{ url: "a", stage: "拆解中", state: "running" }, { url: "b", stage: "排队中", state: "queued" }] });
+    await sleep(1);
+    ctx.detail({ kind: "batch", done: 2, total: 2, items: [{ url: "a", stage: "已写好", state: "done" }, { url: "b", stage: "失败", state: "failed" }] });
+    return 1;
+  });
+  const seen = [];
+  tm.onChange((t) => { if (t.detail) seen.push(t.detail.items.map((x) => x.state).join(",")); });
+  const done = await tm.wait(tm.run("multi").id);
+  assert.ok(seen.includes("running,queued"));
+  assert.equal(done.detail.items[1].stage, "失败");
+});

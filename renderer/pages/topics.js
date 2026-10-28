@@ -96,15 +96,15 @@
         } }, "后台写");
         async function bgWrite() {
           if (doneId || bg.disabled) return;
-          bg.disabled = true; bg.textContent = "后台写作中…";
+          bg.disabled = true; bg.textContent = "后台写作中…"; ops.status("写稿中", "running");
           try {
             const r = await C.runAi("ai:draft", { topic: t.title, platform: t.platform, outline: [t.angle && "切入角度：" + t.angle, t.hook && "开头钩子：" + t.hook].filter(Boolean).join("\n"), save: true },
               { title: `写稿：${t.title.slice(0, 24)}` });
-            if (!r) { bg.disabled = false; bg.textContent = "后台写"; return; }
-            bg.textContent = "已写好 · 打开"; bg.disabled = false;
+            if (!r) { bg.disabled = false; bg.textContent = "后台写"; ops.status("已停止", "warn"); return; }
+            bg.textContent = "已写好 · 打开"; bg.disabled = false; ops.status("已写好", "done");
             doneId = r.contentId;
             window.Shell.toast(`「${r.title || t.title}」写好了，已存为草稿`, "success", 4000);
-          } catch (e) { bg.disabled = false; bg.textContent = "后台写"; C.err(e); }
+          } catch (e) { bg.disabled = false; bg.textContent = "后台写"; ops.status("写稿失败", "failed", e.message); C.err(e); }
         }
         const actions = [write, bg, toPlan];
         const ops = { bgWrite, plan };
@@ -117,6 +117,13 @@
           actions.splice(1, 0, star);
         }
         el.append(h("div", { class: "actions" }, ...actions));
+        // 批量操作时卡片右上角显示这一条的状态
+        ops.status = (text, state, tip = "") => {
+          let b = el.querySelector(".op-badge");
+          if (!b) { b = h("span", { class: "op-badge" }); el.querySelector(".topic-head").append(b); }
+          b.className = `op-badge ${state}`; b.textContent = text; b.title = tip || text;
+          for (const k of ["queued", "running", "done", "failed", "warn"]) el.classList.toggle(`op-${k}`, k === state);
+        };
         el._ops = ops;
         return el;
       }
@@ -130,24 +137,38 @@
           const list = picked();
           if (!list.length) return;
           if (confirmText && !confirm(confirmText.replace("{n}", list.length))) return;
-          const btn = e.currentTarget; btn.disabled = true;
-          let ok = 0, fail = 0;
+          const btn = e.currentTarget;
+          for (const b of btns) b.disabled = true;
+          let ok = 0, fail = 0, n = 0;
+          const prog = (msg) => { progress.hidden = false; progress.textContent = `${label} ${n}/${list.length}${msg ? " · " + msg : ""}`; };
           try {
             if (label === "后台写") {
-              // 后台写各自开任务，不用等写完
-              for (const x of list) { x._ops.bgWrite().catch(() => {}); ok++; }
-              window.Shell.toast(`已开始后台写 ${ok} 篇，写好自动存成草稿`, "success", 4000);
+              // 后台写各自开任务，不用等写完；每张卡片上能看到「写稿中 / 已写好」
+              list.forEach((x) => x._ops.status("排队中", "queued"));
+              const jobs = list.map((x) => x._ops.bgWrite().catch(() => {}).finally(() => { n++; prog(n === list.length ? "全部结束" : "写稿中"); }));
+              prog("写稿中");
+              window.Shell.toast(`已开始后台写 ${list.length} 篇，写好自动存成草稿`, "success", 4000);
+              Promise.all(jobs).then(() => { setTimeout(() => { if (progress.textContent.includes("全部结束")) progress.hidden = true; }, 6000); });
             } else {
-              for (const x of list) { try { await fn(x._ops); ok++; } catch { fail++; } }
+              const doing = { 收藏: "收藏中", 加入日历: "加入中", 删除: "删除中" }[label], done = { 收藏: "已收藏", 加入日历: "已加入日历", 删除: "已删除" }[label];
+              list.forEach((x) => x._ops.status("排队中", "queued"));
+              prog();
+              for (const x of list) {
+                x._ops.status(doing, "running"); prog(doing);
+                try { await fn(x._ops); ok++; x._ops.status(done, "done"); } catch (err) { fail++; x._ops.status(`${label}失败`, "failed", err.message); }
+                n++; prog();
+              }
+              progress.textContent = `${label}完成：成功 ${ok} 个${fail ? `，失败 ${fail} 个（卡片上标红的）` : ""}`;
               window.Shell.toast(`${label} ${ok} 个${fail ? `，${fail} 个失败` : ""}`, fail ? "error" : "success");
             }
-          } finally { btn.disabled = false; }
-          if (label !== "删除") clear();
+          } finally { void btn; }
+          if (label !== "删除") clear(); else refresh();
         } }, label);
         const btns = saved
           ? [run("后台写"), run("加入日历", (o) => o.plan(true)), run("删除", (o) => o.remove(), "删除选中的 {n} 个收藏？")]
           : [run("收藏", (o) => o.star()), run("后台写"), run("加入日历", (o) => o.plan(true))];
-        const el = h("div", { class: "topic-batch", hidden: true }, h("label", { class: "topic-all" }, all, "全选"), count, h("span", { class: "spacer" }), ...btns);
+        const progress = h("div", { class: "topic-batch-progress muted small-text", hidden: true });
+        const el = h("div", { class: "topic-batch", hidden: true }, h("label", { class: "topic-all" }, all, "全选"), count, h("span", { class: "spacer" }), ...btns, progress);
         function clear() { all.checked = false; for (const c of box.querySelectorAll(".topic-check")) { c.checked = false; c.closest(".topic").classList.remove("selected"); } refresh(); }
         function refresh() {
           const n = picked().length, total = box.querySelectorAll(".topic").length;

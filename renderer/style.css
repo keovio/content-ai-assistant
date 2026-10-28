@@ -914,3 +914,25 @@ button.stat:hover { border-color: var(--primary); }
 /* 0.5.7 对标拆解批量栏：平台和「写好后」选项之间的分隔 */
 .bar-sep { width: 1px; height: 18px; background: var(--line); margin: 0 6px; flex: none; }
 .bar-group { display: inline-flex; align-items: center; gap: 10px; flex-wrap: nowrap; }
+
+/* 0.5.8 批量操作：每一项的状态徽标 + 进度条 */
+.op-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; line-height: 1; padding: 4px 8px; border-radius: 999px; white-space: nowrap; flex: none;
+  background: var(--surface-2); color: var(--muted); border: 1px solid var(--line); }
+.op-badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
+.op-badge.running { color: var(--primary); background: var(--primary-soft); border-color: transparent; }
+.op-badge.running::before { animation: op-pulse 1s ease-in-out infinite; }
+.op-badge.done { color: var(--success); background: color-mix(in srgb, var(--success) 12%, transparent); border-color: transparent; }
+.op-badge.warn { color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, transparent); border-color: transparent; }
+.op-badge.failed { color: var(--error); background: var(--error-bg); border-color: transparent; }
+@keyframes op-pulse { 50% { opacity: .25; } }
+.lib-row.op-running, .topic.op-running { background: var(--primary-soft); }
+.lib-row.op-done, .lib-row.op-warn { opacity: .78; }
+.lib-row.op-failed, .topic.op-failed { box-shadow: inset 3px 0 0 var(--error); }
+.lib-row .lib-actions { display: flex; align-items: center; gap: 8px; }
+.topic-head .op-badge { margin-left: auto; }
+.batch-progress { display: flex; align-items: center; gap: 10px; width: 100%; }
+.batch-progress .track { flex: 0 0 160px; height: 6px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.batch-progress .fill { height: 100%; width: 0; background: var(--primary); border-radius: inherit; transition: width .3s; }
+.batch-progress > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.topic-batch-progress { flex-basis: 100%; }
+.topic-batch-progress[hidden] { display: none; }

@@ -98,9 +98,12 @@ async function run(win) {
     return true;`);
   await waitFor(`const b = document.querySelector(".modal .btn.primary"); if (b) { b.click(); return true; } return null;`, 5000, "确认框");
   await sleep(1500);
+  // 0.5.8：批量进行中，每行都有状态徽标，顶部有进度条
+  R.batchLive = await js(`const root = document.getElementById("page-benchmark"); return { badges: [...root.querySelectorAll(".lib-row .op-badge")].map((b) => b.className.replace("op-badge ", "") + ":" + b.textContent), progress: !!root.querySelector(".batch-status .batch-progress") };`);
   await shot("批量拆解进行中");
-  await waitFor(`const t = document.querySelector("#page-benchmark .batch-status"); return t && /完成/.test(t.textContent) ? t.textContent : null;`, 180000, "批量拆解完成");
+  await waitFor(`const t = document.querySelector("#page-benchmark .batch-status"); return t && /^完成：/.test(t.textContent) ? t.textContent : null;`, 180000, "批量拆解完成");
   R.batch = await js(`return document.querySelector("#page-benchmark .batch-status").textContent;`);
+  R.batchRows = await js(`return [...document.querySelectorAll("#page-benchmark .lib-row")].map((r) => ({ badge: r.querySelector(".op-badge") ? r.querySelector(".op-badge").textContent : "", state: r.querySelector(".op-badge") ? r.querySelector(".op-badge").className : "", locked: r.querySelector("input[type=checkbox]").disabled }));`);
   await shot("批量拆解完成");
 
   // ---- 5. 发布页：需改写 / 已存草稿 ----
@@ -283,7 +286,7 @@ async function run(win) {
     && R.tech.items >= 3 && /自动/.test(R.tech.hint)
     && R.stats.rows.length === 1 && R.stats.rows[0].fans === 12345 && R.stats.rows[0].reads === 67000 && R.stats.rows[0].income === 88.5 && !R.stats.rows[0].error
     && R.stats.totals.fans === 12345 && R.layout.cols === 3 && !R.layout.overlap && R.layout.statsWide && R.layout.hotRight && R.layout.row2 && R.layout.row3
-    && R.layout.statsRows === 1 && R.layout.tiles.length === 0 && R.growthUi.acc === 1 && R.layout.oldCards === 0 && R.layout.cards.length === 7 && R.layoutNarrow === 1 && R.stats.growth && R.stats.growth.day.fans === 145 && R.stats.growth.day.income === 3.5 && R.growthUi && R.growthUi.day >= 3 && R.growthUi.today === 1 && R.growthUi.month >= 3 && R.growthUi.income >= 3 && R.topicBatch && R.topicBatch.barShown && R.topicBatch.disabled && R.topicBatch.saved >= 3 && R.topicBatch.starred === 3 && R.topicBatch.count.startsWith("已选 3") && R.topicBatch2.shown && R.topicBatch2.added >= 3 && R.matLayout && R.matLayout.cols === 3 && R.matLayout.leftStack && R.matLayout.allRight
+    && R.layout.statsRows === 1 && R.layout.tiles.length === 0 && R.growthUi.acc === 1 && R.layout.oldCards === 0 && R.layout.cards.length === 7 && R.layoutNarrow === 1 && R.stats.growth && R.stats.growth.day.fans === 145 && R.stats.growth.day.income === 3.5 && R.growthUi && R.growthUi.day >= 3 && R.growthUi.today === 1 && R.growthUi.month >= 3 && R.growthUi.income >= 3 && R.batchLive && R.batchLive.badges.length === 2 && R.batchLive.progress && R.batchRows.filter((x) => x.badge).length === 2 && R.batchRows.filter((x) => x.badge).every((x) => x.locked && !/排队|中$/.test(x.badge)) && R.topicBatch && R.topicBatch.barShown && R.topicBatch.disabled && R.topicBatch.saved >= 3 && R.topicBatch.starred === 3 && R.topicBatch.count.startsWith("已选 3") && R.topicBatch2.shown && R.topicBatch2.added >= 3 && R.matLayout && R.matLayout.cols === 3 && R.matLayout.leftStack && R.matLayout.allRight
     && R.writer.warn && R.pasteDup.duplicate === true && R.pasteNew.duplicate === false && R.breakdowns.every((b) => b.topics === 3);
   console.log("E2E RESULT " + JSON.stringify(R));
   console.log(ok ? "E2E OK" : "E2E FAIL");
