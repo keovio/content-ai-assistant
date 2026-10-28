@@ -1,0 +1,19 @@
+{
+  "version": "0.5.2",
+  "electron": "33.4.11",
+  "bootstrap": 1,
+  "sha256": "600c14d4ca646b4f1ad03a329e40e93dcc659bbe689572bdf06c3178a002733a",
+  "size": 793452,
+  "asarUrl": "https://github.com/keovio/content-ai-assistant/releases/download/v0.5.2/app-update.asar",
+  "installers": {
+    "mac": {
+      "arm64": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-mac-arm64.dmg",
+      "x64": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-mac-x64.dmg"
+    },
+    "win": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-win-x64.exe",
+    "linux": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-linux-x64.AppImage"
+  },
+  "releaseUrl": "https://github.com/keovio/content-ai-assistant/releases/tag/v0.5.2",
+  "notes": "找爆款默认避开国内时政、灾难事故、刑事案件和讣告（今日热点同样过滤；国际 / 军事默认保留，设置里可一起避开、可加自定义屏蔽词）；素材库图片可以编辑了（弹窗看大图、改说明和标签）",
+  "publishedAt": "2026-10-28T11:48:26.531Z"
+}
