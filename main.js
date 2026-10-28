@@ -110,6 +110,7 @@ function createWindow() {
     minWidth: 720,
     minHeight: 480,
     title: config.productName,
+    icon: APP_ICON, // Windows / Linux 窗口和任务栏图标（放在 renderer/assets 里，增量包也能更新）
     show: false, // 先隐藏，画好第一帧再显示，避免白屏闪烁
     backgroundColor: nativeTheme.shouldUseDarkColors ? "#17191e" : "#f5f6f8",
     webPreferences: {
@@ -252,9 +253,13 @@ function runSmokeTest() {
   if (mainWindow.webContents.isLoading()) mainWindow.webContents.once("did-finish-load", go); else go();
 }
 
+// 应用图标：安装包图标用 build/icon.png；运行时图标用 asar 里这一份，换图标走增量包也能生效
+const APP_ICON = path.join(__dirname, "renderer", "assets", "icon.png");
+
 // ---------------- 启动 ----------------
 if (gotLock) {
   app.whenReady().then(() => {
+    if (process.platform === "darwin" && app.dock) { try { app.dock.setIcon(APP_ICON); } catch {} }
     createWindow();
     if (SMOKE) { runSmokeTest(); return; }
     if (!NO_UPDATES && settings.get("autoCheckUpdate")) setTimeout(() => { checkUpdate({ auto: true }).catch(() => {}); }, 6000);

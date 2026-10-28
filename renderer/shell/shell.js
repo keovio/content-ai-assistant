@@ -269,7 +269,18 @@
     el.style.backgroundImage = url ? `url("${url}")` : "";
     el.classList.toggle("has-image", !!url);
   }
-  function applyAppearance() {
+  // 左上角品牌标：有 assets/icon.png 就显示图标，没有就显示产品名首字
+function setBrandMark(productName) {
+  const mark = $("#brand-mark");
+  const letter = (productName || "A").trim().slice(0, 1).toUpperCase();
+  mark.textContent = letter;
+  const img = new Image();
+  img.alt = "";
+  img.onload = () => { mark.textContent = ""; mark.classList.add("has-icon"); mark.appendChild(img); };
+  img.src = "assets/icon.png";
+}
+
+function applyAppearance() {
     const root = document.documentElement;
     const s = settings;
     root.dataset.layout = s.layout === "classic" ? "classic" : "cards";
@@ -392,7 +403,7 @@
     setupResizer();
     api.appearance.onBackground(() => loadBackgroundImage(true));
     $("#app-name").textContent = info.productName;
-    $("#brand-mark").textContent = (info.productName || "A").trim().slice(0, 1).toUpperCase();
+    setBrandMark(info.productName);
     $("#app-version").textContent = "v" + info.version;
     const src = $("#app-source");
     src.textContent = info.source === "update" ? "已更新" : "内置";
