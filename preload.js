@@ -75,6 +75,7 @@ contextBridge.exposeInMainWorld("app", {
     useProvider: (id) => ipcRenderer.invoke("images:useProvider", id),
     test: () => ipcRenderer.invoke("images:test"),
     dataUrl: (name) => ipcRenderer.invoke("images:dataUrl", name),
+    save: (items) => ipcRenderer.invoke("images:save", items),
     import: (p) => ipcRenderer.invoke("images:import", p),
   },
   // 本地数据：集合 contents（内容）/ materials（素材）/ topics（收藏的选题）/ breakdowns（拆解库）/ platformAccounts、autoRuns（只读）

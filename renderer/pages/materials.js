@@ -27,12 +27,15 @@
       const listBox = h("div", { class: "item-list" });
       const useBtn = h("button", { class: "btn small primary", disabled: true, onclick: useSelected }, "用选中的写稿");
       const delSelBtn = h("button", { class: "btn small danger-ghost", disabled: true, onclick: deleteSelected }, "删除选中");
+      const dlSelBtn = h("button", { class: "btn small ghost", disabled: true, onclick: () => downloadImages(shown.filter((m) => selected.has(m.id) && m.kind === "image")) }, "下载图片");
       const allSel = h("input", { type: "checkbox", title: "全选" });
       let shown = [];
       allSel.addEventListener("change", () => { selected.clear(); if (allSel.checked) shown.forEach((m) => selected.add(m.id)); refresh(); });
       const syncSel = () => {
         allSel.checked = shown.length > 0 && shown.every((m) => selected.has(m.id));
-        allSel.indeterminate = selected.size > 0 && !allSel.checked; useBtn.disabled = delSelBtn.disabled = !selected.size; delSelBtn.textContent = selected.size ? `删除选中（${selected.size}）` : "删除选中"; };
+        allSel.indeterminate = selected.size > 0 && !allSel.checked; useBtn.disabled = delSelBtn.disabled = !selected.size; delSelBtn.textContent = selected.size ? `删除选中（${selected.size}）` : "删除选中";
+        const nImg = shown.filter((m) => selected.has(m.id) && m.kind === "image").length;
+        dlSelBtn.disabled = !nImg; dlSelBtn.textContent = nImg ? `下载图片（${nImg}）` : "下载图片"; };
       const fileIn = h("input", { type: "file", accept: "image/png,image/jpeg,image/webp,image/gif", multiple: true, hidden: true, onchange: upload });
       const upTitle = h("input", { class: "input", placeholder: "图片说明（配图时按它匹配，如：街角咖啡店门口）" });
       const upTags = h("input", { class: "input", placeholder: "标签，用空格或逗号分隔" });
@@ -53,7 +56,7 @@
             h("div", { class: "form" },
               h("p", { class: "muted small-text" }, "AI 配图时会先从图片素材里找说明相符的直接用，找不到再生成；AI 生成的图也会自动收进来。"),
               upTitle, upTags, h("div", { class: "actions" }, upBtn, fileIn))),
-          card({ title: "全部素材", icon: "folder", class: "mg-all", actions: [delSelBtn, useBtn] },
+          card({ title: "全部素材", icon: "folder", class: "mg-all", actions: [dlSelBtn, delSelBtn, useBtn] },
             h("div", { class: "toolbar" }, h("label", { class: "check" }, allSel, "全选"), q, kindFilter), listBox))));
 
       q.addEventListener("input", window.Shell.debounce(refresh, 200));
@@ -91,6 +94,13 @@
           reset();
         } catch (e) { C.err(e); }
       }
+      async function downloadImages(list) {
+        if (!list.length) return;
+        try {
+          const r = await C.call(window.app.images.save(list.map((m) => ({ name: m.image, title: m.title || "" }))));
+          if (r && r.ok) window.Shell.toast(`已下载 ${r.count} 张图片到 ${r.dir}`, "success");
+        } catch (e) { C.err(e); }
+      }
       function useSelected() { C.open("writer", { materialIds: [...selected] }); window.Shell.toast(`已在写稿页勾选 ${selected.size} 条素材`, "success"); }
 
       async function deleteSelected() {
@@ -122,7 +132,7 @@
           m.url ? h("a", { href: m.url, target: "_blank", rel: "noopener", class: "small-text" }, m.url) : null,
           h("div", { class: "editor-bar" },
             ...(m.tags || []).map((t) => h("span", { class: "chip static" }, "#" + t)), h("span", { class: "spacer" }),
-            m.kind === "image" ? null : h("button", { class: "btn small ghost", onclick: () => C.copy(m.content || m.url, "素材") }, "复制"),
+            m.kind === "image" ? h("button", { class: "btn small ghost", onclick: () => downloadImages([m]) }, "下载") : h("button", { class: "btn small ghost", onclick: () => C.copy(m.content || m.url, "素材") }, "复制"),
             h("button", { class: "btn small ghost", onclick: () => (m.kind === "image" ? editImage(m) : edit(m)) }, "编辑"),
             h("button", { class: "btn small danger-ghost", onclick: async () => {
               if (!(await window.Shell.confirm("删除这条素材？", { okText: "删除", danger: true }))) return;

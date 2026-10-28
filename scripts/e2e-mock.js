@@ -128,12 +128,14 @@ const server = http.createServer((req, res) => {
     if (!logged) return send(302, "", "text/plain", { Location: "/mp/login" });
     return send(200, html(`<textarea placeholder="请输入文章标题（2～30个字）" style="width:600px"></textarea>
       <div class="ProseMirror" contenteditable="true" style="min-height:300px;width:800px;border:1px solid #ccc"></div>
+      <div><label><input type="radio" name="cv">单图</label><div class="article-cover-add" style="width:80px;height:60px;border:1px dashed #999" onclick="document.getElementById('cvm').style.display='block'">+</div><img id="cvimg" style="display:none"></div>
+      <div id="cvm" style="display:none;border:1px solid #333;padding:8px">上传图片 <input type="file" accept="image/*" id="cvf" onchange="document.getElementById('cvimg').dataset.ok=this.files.length?'1':''"><button onclick="document.getElementById('cvm').style.display='none'">确定</button></div>
       <button id="save">存草稿</button><span id="tip"></span>
       <script>
         // 模拟平台编辑器：粘贴图片时自己「上传」并插入 <img>
         document.querySelector(".ProseMirror").addEventListener("paste",(e)=>{const f=[...(e.clipboardData&&e.clipboardData.files||[])];if(f.length){e.preventDefault();for(const x of f){const img=document.createElement("img");img.dataset.pasted="1";img.alt=x.type;const s=getSelection();if(s.rangeCount&&document.querySelector(".ProseMirror").contains(s.anchorNode)){const r=s.getRangeAt(0);r.deleteContents();r.insertNode(img);r.setStartAfter(img);r.collapse(true);}else document.querySelector(".ProseMirror").appendChild(img);}}});
-        document.getElementById("save").onclick=async()=>{const t=document.querySelector("textarea").value,b=document.querySelector(".ProseMirror").innerText,imgs=document.querySelectorAll(".ProseMirror img").length;
-        await fetch("/mp/save",{method:"POST",body:JSON.stringify({title:t,body:b,imgs})});document.getElementById("tip").textContent="已保存";};</script>`, "发文"));
+        document.getElementById("save").onclick=async()=>{const t=document.querySelector("textarea").value,b=document.querySelector(".ProseMirror").innerText,imgs=document.querySelectorAll(".ProseMirror img").length,cover=document.getElementById("cvimg").dataset.ok==="1";
+        await fetch("/mp/save",{method:"POST",body:JSON.stringify({title:t,body:b,imgs,cover})});document.getElementById("tip").textContent="已保存";};</script>`, "发文"));
   }
   if (u.pathname === "/mp/save" && req.method === "POST") {
     let buf = ""; req.on("data", (d) => { buf += d; }); req.on("end", () => { try { drafts.push(JSON.parse(buf)); } catch { /* ignore */ } send(200, "{}", "application/json"); });
@@ -170,11 +172,11 @@ server.listen(0, "127.0.0.1", async () => {
   const run = await runApp("run");
   const m = run.out.match(/E2E RESULT (.*)/);
   const result = m ? JSON.parse(m[1]) : {};
-  result.mockDrafts = drafts.map((d) => d.title + (d.imgs ? `（${d.imgs} 张图）` : ""));
+  result.mockDrafts = drafts.map((d) => d.title + (d.imgs ? `（${d.imgs} 张图）` : "") + (d.cover ? "（有封面）" : ""));
   result.imageCalls = imageCalls;
   result.aiCalls = aiCalls.length;
   fs.writeFileSync(path.join(OUT, "result.json"), JSON.stringify(result, null, 2));
-  const ok = run.code === 0 && /E2E OK/.test(run.out) && drafts.length >= 1 && drafts.some((d) => d.title && d.imgs >= 1) && !drafts.some((d) => /CAIIMG/.test(d.body || "")) && imageCalls >= 1;
+  const ok = run.code === 0 && /E2E OK/.test(run.out) && drafts.length >= 1 && drafts.some((d) => d.title && d.imgs >= 1 && d.cover) && !drafts.some((d) => /CAIIMG/.test(d.body || "")) && imageCalls >= 1;
   console.log((ok ? "E2E OK " : "E2E FAIL ") + JSON.stringify(result));
   console.log("截图：" + OUT);
   server.close();
