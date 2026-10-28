@@ -144,8 +144,16 @@ async function run(win) {
     const TINY = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
     R.upload = await js(`const r = await window.app.images.import({ data: ${JSON.stringify(TINY)}, fileName: "街角咖啡店.png", tags: "咖啡 门店" }); return { kind: r.kind, title: r.title, image: !!r.image };`);
     await nav("materials");
+    await js(`window.Shell.toggleLogDock(false); return true;`);
     await sleep(1200);
     await shot("素材库-图片");
+    // 0.5.5：素材库左一列「记一条」「上传图片」，「全部素材」占右两格
+    R.matLayout = await js(`const g = document.querySelector("#page-materials .mat-grid"); if (!g) return null;
+      const r = (sel) => g.querySelector(sel).getBoundingClientRect();
+      const f = r(".mg-form"), u = r(".mg-upload"), a = r(".mg-all");
+      return { cols: getComputedStyle(g).gridTemplateColumns.split(" ").length,
+        leftStack: Math.abs(f.left - u.left) < 2 && u.top > f.bottom,
+        allRight: a.left > f.right && a.width > f.width * 1.8 && Math.abs(a.top - f.top) < 2 };`);
     // 0.5.2：图片素材能编辑
     R.imgEdit = await js(`const btn = [...document.querySelectorAll("#page-materials .item-list button")].find((b) => b.textContent === "编辑" && b.closest(".material")?.querySelector("img"));
       if (!btn) return { error: "no image edit button" };
@@ -212,10 +220,18 @@ async function run(win) {
   // ---- 11. 0.5.4 账号数据：后台窗口读头条号后台首页 → 工作台账号数据卡片 ----
   const st = await js(`return await window.app.publish.refreshStats();`);
   if (st && st.task) await waitFor(`const t = (await window.app.tasks.list()).find((x) => x.id === ${JSON.stringify(st.task && st.task.id)}); return t && ["done", "failed", "cancelled"].includes(t.status) ? t : null;`, 90000, "读取账号数据");
-  R.stats = await js(`const d = await window.app.publish.stats(); return { totals: d.totals, rows: d.accounts.map((a) => ({ name: a.name, fans: a.stats.fans, reads: a.stats.reads, income: a.stats.income, error: a.stats.error, at: !!a.stats.at })) };`);
+  R.stats = await js(`const d = await window.app.publish.stats(); return { growth: d.growth && { day: d.growth.day.sum, week: d.growth.week.sum, month: d.growth.month.sum }, totals: d.totals, rows: d.accounts.map((a) => ({ name: a.name, fans: a.stats.fans, reads: a.stats.reads, income: a.stats.income, error: a.stats.error, at: !!a.stats.at })) };`);
   await nav("home");
   await js(`window.Shell.toggleLogDock(false); return true;`); // 关掉运行日志面板，按 1440 宽看三列布局
   await sleep(1500);
+  // 0.5.5 增长图：本日（近 7 天）有柱子，切到本周 / 本月也能画
+  R.growthUi = await js(`const g = document.querySelector("#home-growth"); if (!g) return null;
+    const bars = () => g.querySelectorAll(".growth-chart rect.gbar:not(.none)").length;
+    const out = { day: bars(), today: g.querySelectorAll(".growth-chart rect.gbar.today").length };
+    g.querySelector('[data-period="month"]').click(); out.month = g.querySelectorAll(".growth-chart text.lbl").length > 4 && bars();
+    g.querySelector('[data-metric="income"]').click(); out.income = bars();
+    g.querySelector('[data-period="day"]').click(); g.querySelector('[data-metric="fans"]').click();
+    return out;`);
   await shot("工作台-自动创作之后");
   // 三列网格：账号数据占两列、今日热点在右边占两行，同一行等高，卡片不重叠
   R.layout = await js(`const g = document.querySelector("#page-home .home-grid"); const cards = [...g.children].map((c) => { const r = c.getBoundingClientRect(); return { t: c.querySelector(".card-head h2").textContent.trim(), x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), hgt: Math.round(r.height) }; });
@@ -245,7 +261,7 @@ async function run(win) {
     && R.tech.items >= 3 && /自动/.test(R.tech.hint)
     && R.stats.rows.length === 1 && R.stats.rows[0].fans === 12345 && R.stats.rows[0].reads === 67000 && R.stats.rows[0].income === 88.5 && !R.stats.rows[0].error
     && R.stats.totals.fans === 12345 && R.layout.cols === 3 && !R.layout.overlap && R.layout.statsWide && R.layout.hotRight && R.layout.row2 && R.layout.row3
-    && R.layout.statsRows === 1 && R.layout.oldCards === 0 && R.layout.cards.length === 7 && R.layoutNarrow === 1
+    && R.layout.statsRows === 1 && R.layout.oldCards === 0 && R.layout.cards.length === 7 && R.layoutNarrow === 1 && R.stats.growth && R.stats.growth.day.fans === 145 && R.stats.growth.day.income === 3.5 && R.growthUi && R.growthUi.day >= 3 && R.growthUi.today === 1 && R.growthUi.month >= 3 && R.growthUi.income >= 3 && R.matLayout && R.matLayout.cols === 3 && R.matLayout.leftStack && R.matLayout.allRight
     && R.writer.warn && R.pasteDup.duplicate === true && R.pasteNew.duplicate === false && R.breakdowns.every((b) => b.topics === 3);
   console.log("E2E RESULT " + JSON.stringify(R));
   console.log(ok ? "E2E OK" : "E2E FAIL");

@@ -90,7 +90,68 @@
               h("td", { class: "num" }, fmtMoney(s.income)),
               h("td", { class: "stat-when" }, state || "", state && s.at ? " · " : "", s.at ? h("span", { class: "muted", title: C.fmtDate(s.at) }, when(s)) : ""));
           })));
-        statsBox.replaceChildren(totals, h("div", { class: "stats-scroll" }, table));
+        statsBox.replaceChildren(totals, growthBox(d.growth), h("div", { class: "stats-scroll" }, table));
+      }
+      // 0.5.5 增长：本日（近 7 天）/ 本周 / 本月，柱状图看每天涨了多少
+      const growthState = { period: "day", metric: "fans" };
+      let lastGrowth = null;
+      const PERIODS = [["day", "本日"], ["week", "本周"], ["month", "本月"]];
+      const METRICS = [["fans", "粉丝"], ["reads", "阅读"], ["income", "收益"]];
+      const fmtDelta = (k, n) => (n == null ? "—" : (n > 0 ? "+" : n < 0 ? "−" : "") + (k === "income" ? "¥" + Math.abs(n).toFixed(2) : fmtNum(Math.abs(n))));
+      function growthBox(g) {
+        lastGrowth = g || lastGrowth;
+        const box = h("div", { class: "growth", id: "home-growth" });
+        drawGrowth(box);
+        return box;
+      }
+      function drawGrowth(box) {
+        const g = lastGrowth && lastGrowth[growthState.period];
+        const seg = (list, key) => h("div", { class: "segmented small" }, ...list.map(([id, label]) =>
+          h("button", { class: growthState[key] === id ? "active" : "", dataset: { [key]: id }, onclick: () => { growthState[key] = id; drawGrowth(box); } }, label)));
+        const head = h("div", { class: "growth-head" }, seg(PERIODS, "period"), h("span", { class: "spacer" }), seg(METRICS, "metric"));
+        if (!g) { box.replaceChildren(head, h("p", { class: "muted small-text" }, "还没有数据。")); return; }
+        const label = PERIODS.find((x) => x[0] === growthState.period)[1];
+        const sums = h("div", { class: "growth-sums" }, ...METRICS.map(([k, name]) =>
+          h("span", { class: "growth-sum" + (k === growthState.metric ? " on" : ""), dataset: { k } }, h("span", { class: "muted" }, `${label}${name}`), h("b", { class: (g.sum[k] || 0) < 0 ? "neg" : "" }, fmtDelta(k, g.sum[k])))));
+        const hasData = g.days.some((x) => x[growthState.metric] != null);
+        const chart = hasData ? barChart(g, growthState.metric) : h("p", { class: "growth-empty muted small-text" }, g.since ? "每天读一次存一份快照，明天起这里就能看到每天涨了多少。" : "读到第一份账号数据后开始记录，第二天起能看到增长。");
+        box.replaceChildren(head, sums, chart);
+      }
+      function barChart(g, k) {
+        const W = 640, H = 120, top = 16, bottom = 18;
+        const days = g.days, n = days.length;
+        const vals = days.map((x) => x[k] || 0);
+        const max = Math.max(1, ...vals.map(Math.abs));
+        const hasNeg = vals.some((v) => v < 0);
+        const zero = hasNeg ? top + (H - top - bottom) / 2 : H - bottom;
+        const scale = (hasNeg ? (H - top - bottom) / 2 : H - top - bottom) / max;
+        const slot = W / n, bw = Math.max(3, Math.min(28, slot * 0.6));
+        const wk = ["日", "一", "二", "三", "四", "五", "六"];
+        const NS = "http://www.w3.org/2000/svg";
+        const el = (tag, attrs, text) => { const e = document.createElementNS(NS, tag); for (const [a, v] of Object.entries(attrs)) e.setAttribute(a, v); if (text != null) e.textContent = text; return e; };
+        const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, class: "growth-chart", role: "img" });
+        svg.append(el("line", { x1: 0, x2: W, y1: zero, y2: zero, class: "axis" }));
+        days.forEach((x, i) => {
+          const v = x[k];
+          const cx = slot * i + slot / 2;
+          const dt = new Date(x.d + "T12:00:00");
+          const lbl = g.period === "week" ? "周" + wk[dt.getDay()] : g.period === "month" ? String(dt.getDate()) : `${dt.getMonth() + 1}/${dt.getDate()}`;
+          const showLbl = g.period !== "month" || dt.getDate() === 1 || dt.getDate() % 5 === 0 || x.d === g.today;
+          if (v != null && v !== 0) {
+            const hgt = Math.max(2, Math.abs(v) * scale);
+            const y = v > 0 ? zero - hgt : zero;
+            const r = el("rect", { x: cx - bw / 2, y, width: bw, height: hgt, rx: 2, class: "gbar" + (x.d === g.today ? " today" : "") + (v < 0 ? " neg" : "") });
+            r.append(el("title", {}, `${x.d}：${fmtDelta(k, v)}`));
+            svg.append(r);
+            if (Math.abs(v) === max || x.d === g.today) svg.append(el("text", { x: cx, y: v > 0 ? y - 3 : y + hgt + 10, class: "val" }, fmtDelta(k, v)));
+          } else if (!x.future) {
+            const r = el("rect", { x: cx - bw / 2, y: zero - 1, width: bw, height: 2, class: "gbar none" });
+            r.append(el("title", {}, `${x.d}：${v == null ? "没有数据" : "没变化"}`));
+            svg.append(r);
+          }
+          if (showLbl) svg.append(el("text", { x: cx, y: H - 4, class: "lbl" + (x.d === g.today ? " today" : "") + (x.future ? " future" : "") }, lbl));
+        });
+        return h("div", { class: "growth-chart-wrap" }, svg);
       }
       async function refreshStats() {
         try {

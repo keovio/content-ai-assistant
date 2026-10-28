@@ -118,7 +118,9 @@ const server = http.createServer((req, res) => {
   if (u.pathname === "/mp/login") return send(200, html(`<p>模拟登录页</p><script>document.cookie="sessionid=new; path=/; max-age=86400";setTimeout(()=>location.href="/mp/home",300)</script>`, "登录"));
   // 后台首页：数据概览（账号数据从这里读；数字晚一点才渲染出来，模拟真实后台的异步加载）
   if (u.pathname === "/mp/home") return logged ? send(200, html(`<p>后台首页</p><div id="ov"><div>粉丝数</div><div class="n">--</div><div>昨日 +12</div><div>阅读/播放</div><div class="n">--</div><div>累计收益</div><div class="n">--</div></div>
-    <script>setTimeout(()=>{const n=document.querySelectorAll("#ov .n");n[0].textContent="12,345";n[1].textContent="6.7万";n[2].textContent="¥88.50";},1200)</script>`, "后台")) : send(302, "", "text/plain", { Location: "/mp/login" });
+    <script>setTimeout(()=>{const n=document.querySelectorAll("#ov .n");n[0].textContent="12,345";n[1].textContent="6.7万";},1200);fetch("/mp/api/overview").then((r)=>r.json())</script>`, "后台")) : send(302, "", "text/plain", { Location: "/mp/login" });
+  // 0.5.5：收益只在接口 JSON 里（页面上一直是 --），测从接口补数据
+  if (u.pathname === "/mp/api/overview") return send(200, JSON.stringify({ code: 0, data: { author: { name: "x" }, total_income: "88.50", items: [{ fans: 1 }] } }), "application/json");
   if (u.pathname === "/mp/drafts") return send(200, html(`<p>草稿箱</p><ul>${drafts.map((d) => `<li>${esc(d.title)}</li>`).join("")}</ul>`, "草稿箱"));
   if (u.pathname === "/mp/editor") {
     if (!logged) return send(302, "", "text/plain", { Location: "/mp/login" });
@@ -145,6 +147,7 @@ function runApp(phase) {
     if (process.platform === "linux") args.push("--no-sandbox");
     const env = {
       ...process.env, E2E_PHASE: phase, E2E_OUT: OUT, E2E_BASE: base, APP_DATA_DIR: DATA, APP_UPDATES_DIR: path.join(DATA, "updates"), APP_NO_UPDATES: "1", CAI_STATS_DELAY: "600000",
+      CAI_E2E_STATS_HISTORY: JSON.stringify([{ daysAgo: 9, fans: 11000, reads: 52000, income: 60 }, { daysAgo: 3, fans: 11800, reads: 60000, income: 75 }, { daysAgo: 2, fans: 12000, reads: 62500, income: 80 }, { daysAgo: 1, fans: 12200, reads: 65000, income: 85 }]),
       CAI_DISCOVER_OVERRIDES: JSON.stringify({ toutiao: { searchUrl: `${base}/search?q={kw}&days={days}`, warmup: `${base}/`, pages: 1, filterUrl: "/a\\d+/" }, hot: { toutiao: `${base}/hot/toutiao`, baidu: `${base}/hot/baidu` } }),
       CAI_PUBLISH_OVERRIDES: JSON.stringify({ toutiao: { home: `${base}/mp/home`, login: `${base}/mp/login`, drafts: `${base}/mp/drafts`, editor: `${base}/mp/editor`, loginUrl: ["/mp/login"], cookieUrl: `${base}/`, cookies: ["sessionid"] } }),
     };

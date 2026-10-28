@@ -13,7 +13,7 @@
     icon: "folder",
     order: 50,
     render(root) {
-      const { card, modules } = window.Shell;
+      const { card } = window.Shell;
       root.classList.add("page-wide");
       const kindSel = C.selectEl(TEXT_KINDS, "note");
       const titleIn = h("input", { class: "input", placeholder: "标题（可选）" });
@@ -35,18 +35,19 @@
 
       root.append(
         h("header", { class: "page-head" }, h("div", {}, h("h1", {}, "素材库"), h("p", { class: "sub" }, "平时看到好东西就丢进来：写稿按选题自动引用，配图优先复用图片素材"))),
-        modules(
-          card({ title: "记一条", icon: "plus", id: "material-form" },
+        // 0.5.5：左边一列放「记一条」「上传图片」，「全部素材」占右边两格
+        h("div", { class: "mat-wrap" }, h("div", { class: "mat-grid" },
+          card({ title: "记一条", icon: "plus", id: "material-form", class: "mg-form" },
             h("div", { class: "form" },
               h("div", { class: "form-row" }, C.field("类型", kindSel), C.field("标签", tagsIn)),
               titleIn, contentIn, urlIn,
               h("div", { class: "actions" }, saveBtn, cancelBtn))),
-          card({ title: "上传图片", icon: "image", id: "material-upload" },
+          card({ title: "上传图片", icon: "image", id: "material-upload", class: "mg-upload" },
             h("div", { class: "form" },
               h("p", { class: "muted small-text" }, "AI 配图时会先从图片素材里找说明相符的直接用，找不到再生成；AI 生成的图也会自动收进来。"),
               upTitle, upTags, h("div", { class: "actions" }, upBtn, fileIn))),
-          card({ title: "全部素材", icon: "folder", class: "span-wide", actions: [useBtn] },
-            h("div", { class: "toolbar" }, q, kindFilter), listBox)));
+          card({ title: "全部素材", icon: "folder", class: "mg-all", actions: [useBtn] },
+            h("div", { class: "toolbar" }, q, kindFilter), listBox))));
 
       q.addEventListener("input", window.Shell.debounce(refresh, 200));
       kindFilter.addEventListener("change", refresh);
