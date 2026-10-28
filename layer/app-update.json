@@ -1,0 +1,19 @@
+{
+  "version": "0.5.6",
+  "electron": "33.4.11",
+  "bootstrap": 1,
+  "sha256": "e67ec7ec2e6434e40b4f1770e8cbef65f939f754bd7cfb43bb09ae8d9b09e11f",
+  "size": 845770,
+  "asarUrl": "https://github.com/keovio/content-ai-assistant/releases/download/v0.5.6/app-update.asar",
+  "installers": {
+    "mac": {
+      "arm64": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-mac-arm64.dmg",
+      "x64": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-mac-x64.dmg"
+    },
+    "win": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-win-x64.exe",
+    "linux": "https://github.com/keovio/content-ai-assistant/releases/download/v0.4.0/content-ai-assistant-0.4.0-linux-x64.AppImage"
+  },
+  "releaseUrl": "https://github.com/keovio/content-ai-assistant/releases/tag/v0.5.6",
+  "notes": "工作台「账号数据」去掉合计，只看各个号自己的数据：增长图按单个号显示，点表格里的一行或用下拉切换账号；选题页支持批量操作：勾选或全选后一次收藏、后台写、加入日历，已收藏的还能批量删除",
+  "publishedAt": "2026-10-28T13:06:24.391Z"
+}
