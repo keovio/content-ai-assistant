@@ -1,0 +1,19 @@
+{
+  "version": "0.1.1",
+  "electron": "33.4.11",
+  "bootstrap": 1,
+  "sha256": "b0ec9912abebcf08971623578bcf5f0bbce6915e652d3090786452ce9ca587cc",
+  "size": 479549,
+  "asarUrl": "https://github.com/keovio/content-ai-assistant/releases/download/v0.1.1/app-update.asar",
+  "installers": {
+    "mac": {
+      "arm64": "https://github.com/keovio/content-ai-assistant/releases/download/v0.1.0/content-ai-assistant-0.1.0-mac-arm64.dmg",
+      "x64": "https://github.com/keovio/content-ai-assistant/releases/download/v0.1.0/content-ai-assistant-0.1.0-mac-x64.dmg"
+    },
+    "win": "https://github.com/keovio/content-ai-assistant/releases/download/v0.1.0/content-ai-assistant-0.1.0-win-x64.exe",
+    "linux": "https://github.com/keovio/content-ai-assistant/releases/download/v0.1.0/content-ai-assistant-0.1.0-linux-x64.AppImage"
+  },
+  "releaseUrl": "https://github.com/keovio/content-ai-assistant/releases/tag/v0.1.1",
+  "notes": "新图标：钢笔与火花",
+  "publishedAt": "2026-10-28T07:34:34.346Z"
+}
