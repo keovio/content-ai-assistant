@@ -1,0 +1,168 @@
+"use strict";
+// 端到端测试的驱动（由 scripts/e2e-mock.js 用 electron 启动，不要单独运行）：
+// 先加载真正的 main.js，等主窗口加载完后，在页面里一步步点按钮 / 调接口，并截图。
+const path = require("path");
+const fs = require("fs");
+const { app, BrowserWindow, session } = require("electron");
+
+const PHASE = process.env.E2E_PHASE;
+const OUT = process.env.E2E_OUT;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+let shotN = 0;
+
+require(path.join(__dirname, "..", "main.js"));
+
+app.on("browser-window-created", (_e, win) => {
+  if (global.__e2eMain) return;
+  global.__e2eMain = win;
+  win.webContents.once("did-finish-load", () => { setTimeout(() => run(win).catch((err) => { console.log("E2E FAIL " + (err && err.stack || err)); app.exit(1); }), 1500); });
+});
+
+async function run(win) {
+  win.setSize(1440, 960);
+  const js = (code) => win.webContents.executeJavaScript(`(async () => { ${code} })()`, true);
+  const shot = async (name) => {
+    await sleep(600);
+    const img = await win.webContents.capturePage();
+    const file = path.join(OUT, `${String(++shotN).padStart(2, "0")}-${name}.png`);
+    fs.writeFileSync(file, img.toPNG());
+    console.log("截图 " + file);
+  };
+  const waitFor = async (code, ms = 60000, what = "") => {
+    const end = Date.now() + ms;
+    for (;;) {
+      const v = await js(code).catch(() => null);
+      if (v) return v;
+      if (Date.now() > end) throw new Error("等待超时：" + (what || code.slice(0, 80)));
+      await sleep(400);
+    }
+  };
+  const nav = (id) => js(`window.Shell.navigate(${JSON.stringify(id)}); await new Promise(r => setTimeout(r, 500)); return true;`);
+
+  if (PHASE === "seed") {
+    // 模拟 0.4.0 老用户：运营账号 × 头条号 的登录空间里已有登录 cookie
+    const accId = await js(`return (await window.app.store.list("accounts"))[0].id;`);
+    const base = process.env.E2E_BASE;
+    const ses = session.fromPartition(`persist:pub-${accId}-toutiao`);
+    await ses.cookies.set({ url: base + "/", name: "sessionid", value: "old-0.4.0-login", expirationDate: Math.floor(Date.now() / 1000) + 86400 * 30 });
+    await ses.cookies.flushStore();
+    await js(`await window.app.settings.set({ platformAccountsMigrated: false }); return true;`);
+    console.log("E2E SEED OK " + accId);
+    await sleep(500);
+    app.exit(0);
+    return;
+  }
+
+  const R = {};
+  // ---- 1. 迁移：0.4.0 的登录变成平台号，绑定原运营账号 ----
+  const pas = await waitFor(`const l = await window.app.publish.accounts(); return l.length ? l : null;`, 15000, "迁移平台号");
+  R.migrated = pas.map((a) => ({ platform: a.platform, name: a.name, loggedIn: a.loggedIn, bound: !!a.boundAccountId, migratedFrom: !!a.migratedFrom }));
+
+  // ---- 2. AI 指向本地模拟接口 ----
+  await js(`
+    await window.app.ai.setKey("sk-e2e-test");
+    await window.app.settings.set({ aiProvider: "custom", aiBaseUrl: ${JSON.stringify(process.env.E2E_BASE + "/openai")}, aiModel: "mock-model", pushShowWindow: false, pushInterval: 3, defaultPlatform: "wechat" });
+    window.Shell.saveSettings({ aiProvider: "custom", pushShowWindow: false, defaultPlatform: "wechat" });
+    return true;`);
+  await nav("home");
+  await waitFor(`return document.querySelector("#home-hot .hot-list li") ? true : null;`, 15000, "今日热点");
+  await sleep(800);
+  await shot("工作台");
+  R.home = await js(`return { flow: document.querySelectorAll("#page-home .flow-step").length, hot: document.querySelectorAll("#home-hot .hot-list li").length, todo: document.querySelector("#home-todo").innerText.slice(0, 200) };`);
+
+  // ---- 3. 找爆款：近 3 天，按点赞排，五天前的被过滤 ----
+  await nav("benchmark");
+  await js(`
+    const root = document.getElementById("page-benchmark");
+    const sel = root.querySelector(".bm-search select"); sel.value = "toutiao"; sel.dispatchEvent(new Event("change"));
+    const kw = root.querySelector(".bm-search input.grow"); kw.value = "AI 副业";
+    root.querySelectorAll(".bm-search select")[1].value = "3";
+    [...root.querySelectorAll(".bm-search button")].find((b) => b.textContent === "找爆款").click();
+    return true;`);
+  await waitFor(`return document.querySelectorAll("#page-benchmark .lib-row").length ? true : null;`, 60000, "搜索结果");
+  R.search = await js(`return [...document.querySelectorAll("#page-benchmark .bm-panel:not([hidden]) .lib-row")].map((r) => r.querySelector(".lib-title").textContent + " | " + (r.querySelector(".heat") ? r.querySelector(".heat").textContent : "无热度"));`);
+  await shot("找爆款-搜索结果");
+
+  // ---- 4. 勾选前两篇，批量拆解并写成 公众号 + 头条号，直接推草稿箱 ----
+  await js(`
+    const root = document.getElementById("page-benchmark");
+    const rows = [...root.querySelectorAll(".lib-row")].slice(0, 2);
+    rows.forEach((r) => { const cb = r.querySelector("input[type=checkbox]"); cb.checked = true; cb.dispatchEvent(new Event("change")); });
+    const bar = root.querySelector(".batch-bar");
+    for (const cb of bar.querySelectorAll(".check-row input")) cb.checked = ["wechat", "toutiao"].includes(cb.value);
+    const push = [...bar.querySelectorAll("label.check")].find((l) => l.textContent.includes("草稿箱")).querySelector("input"); push.checked = true;
+    [...bar.querySelectorAll("button")].find((b) => b.textContent.startsWith("拆解并创作")).click();
+    return true;`);
+  await waitFor(`const b = document.querySelector(".modal .btn.primary"); if (b) { b.click(); return true; } return null;`, 5000, "确认框");
+  await sleep(1500);
+  await shot("批量拆解进行中");
+  await waitFor(`const t = document.querySelector("#page-benchmark .batch-status"); return t && /完成/.test(t.textContent) ? t.textContent : null;`, 180000, "批量拆解完成");
+  R.batch = await js(`return document.querySelector("#page-benchmark .batch-status").textContent;`);
+  await shot("批量拆解完成");
+
+  // ---- 5. 发布页：需改写 / 已存草稿 ----
+  await nav("publish");
+  await sleep(800);
+  await shot("发布-列表");
+  R.contents = await js(`return (await window.app.store.list("contents")).map((c) => ({ title: c.title, platform: c.platform, overlap: c.overlap, needsRewrite: c.needsRewrite, push: c.pushes[c.platform] ? c.pushes[c.platform].status : "", pushAccount: c.pushes[c.platform] ? c.pushes[c.platform].accountName : "", group: !!c.groupId, ref: !!c.refId }));`);
+  await js(`document.querySelector("#page-publish [data-tab='calendar']").click(); return true;`);
+  await shot("发布-日历");
+
+  // ---- 6. 创作页：参考爆款、重合度、平台版本、选号推送 ----
+  const masterId = await js(`const l = await window.app.store.list("contents"); const m = l.find((c) => c.needsRewrite && c.platform === "wechat") || l[0]; return m.id;`);
+  await js(`window.Content.open("writer", { id: ${JSON.stringify(masterId)} }); return true;`);
+  await waitFor(`return document.querySelector("#page-writer .ov-box:not([hidden]) .ov-num") ? true : null;`, 15000, "重合度");
+  await sleep(1000);
+  await shot("创作-需改写提醒");
+  R.writer = await js(`return { overlap: document.querySelector("#page-writer .ov-num").textContent, warn: !!document.querySelector("#page-writer .ov-warn"), ref: document.querySelector("#page-writer .ref-title") ? document.querySelector("#page-writer .ref-title").textContent : "", versions: document.querySelectorAll("#writer-versions .v-tabs button").length, picker: [...document.querySelectorAll("#page-writer .push-bar .pa-picker option")].map((o) => o.textContent) };`);
+  const goodId = await js(`const l = await window.app.store.list("contents"); const m = l.find((c) => !c.needsRewrite && c.platform === "wechat"); return m && m.id;`);
+  if (goodId) {
+    await js(`window.Content.open("writer", { id: ${JSON.stringify(goodId)} }); return true;`);
+    await sleep(1500);
+    await js(`document.getElementById("writer-versions").scrollIntoView(); return true;`);
+    await shot("创作-平台版本");
+  }
+
+  // ---- 7. 拆解库 ----
+  await js(`window.Content.open("benchmark", { tab: "library" }); return true;`);
+  await waitFor(`return document.querySelector("#page-benchmark .bd-detail") ? true : null;`, 10000, "拆解详情");
+  await shot("拆解库");
+  R.breakdowns = await js(`return (await window.app.store.list("breakdowns")).map((b) => ({ title: b.title, skeleton: b.analysis.skeleton.length, topics: b.analysis.topics.length, avoid: b.analysis.avoid.length }));`);
+
+  // ---- 8. 粘贴链接拆解：同一篇不拆第二次（去重） ----
+  const art = process.env.E2E_BASE.replace("127.0.0.1", "localhost") + "/a7001/";
+  R.pasteDup = await js(`const r = await window.Content.runAi("discover:breakdown", { url: ${JSON.stringify(art)} }); return { duplicate: r.duplicate, title: r.breakdown.title };`);
+  R.pasteNew = await js(`const r = await window.Content.runAi("discover:breakdown", { url: ${JSON.stringify(process.env.E2E_BASE.replace("127.0.0.1", "localhost") + "/a7004/")} }); return { duplicate: r.duplicate, title: r.breakdown.title };`);
+  await js(`window.Content.open("benchmark", { tab: "paste" }); return true;`);
+  await shot("粘贴拆解");
+
+  // ---- 9. 设置：平台账号（多号、改名、绑定）+ 定时自动创作 ----
+  const paId = R.migrated.length ? await js(`return (await window.app.publish.accounts())[0].id;`) : "";
+  if (paId) await js(`await window.app.publish.update(${JSON.stringify(paId)}, { name: "主力头条号" }); return true;`);
+  await js(`await window.app.settings.set({ autoEnabled: true, autoTimes: "08:30, 20:00", autoKeywords: "AI 副业", autoSource: "toutiao", autoDays: 3, autoCount: 2, autoTargets: "toutiao", autoPush: true });
+    window.Shell.saveSettings({ autoEnabled: true }); return true;`);
+  await nav("settings");
+  await sleep(800);
+  await js(`document.getElementById("settings-platform-login").scrollIntoView(); return true;`);
+  await shot("设置-平台账号");
+  await js(`document.getElementById("settings-auto").scrollIntoView(); return true;`);
+  await shot("设置-定时自动创作");
+
+  // ---- 10. 立即运行一次自动创作：拆过的跳过，剩下的写成头条号并推草稿箱 ----
+  const t = await js(`return (await window.app.auto.runNow()).task.id;`);
+  await waitFor(`const t = (await window.app.tasks.list()).find((x) => x.id === ${JSON.stringify(t)}); return t && ["done", "failed", "cancelled"].includes(t.status) ? t : null;`, 180000, "自动创作完成");
+  R.auto = await js(`const s = await window.app.auto.status(); return { next: s.next ? new Date(s.next).toString().slice(0, 21) : "", last: s.lastRun && s.lastRun.summary, status: s.lastRun && s.lastRun.status };`);
+  await nav("home");
+  await sleep(1200);
+  await shot("工作台-自动创作之后");
+  R.final = await js(`return { contents: (await window.app.store.list("contents", { accountId: "*" })).length, breakdowns: (await window.app.store.list("breakdowns")).length, todo: document.querySelector("#home-todo").innerText };`);
+
+  const ok = R.migrated.length === 1 && R.migrated[0].loggedIn && R.migrated[0].bound
+    && R.search.length === 3 && !R.search.some((s) => s.includes("五天前")) && /3\.2万/.test(R.search[0])
+    && R.contents.some((c) => c.needsRewrite && !c.push) && R.contents.some((c) => c.push === "saved" && c.pushAccount)
+    && R.writer.warn && R.pasteDup.duplicate === true && R.pasteNew.duplicate === false && R.breakdowns.every((b) => b.topics === 3);
+  console.log("E2E RESULT " + JSON.stringify(R));
+  console.log(ok ? "E2E OK" : "E2E FAIL");
+  await sleep(300);
+  app.exit(ok ? 0 : 1);
+}

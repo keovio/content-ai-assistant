@@ -1,12 +1,12 @@
 "use strict";
-// 选题灵感：按领域 / 热点批量生成选题 → 收藏 / 直接写成稿 / 放进日历当选题
+// 选题：按领域 / 热点批量生成选题 → 收藏 / 直接写成稿 / 放进发布日历当选题
 (function () {
   const { h } = window.Shell;
   const C = window.Content;
 
   window.Shell.registerPage({
     id: "topics",
-    title: "选题灵感",
+    title: "选题",
     icon: "bulb",
     order: 20,
     render(root) {
@@ -34,7 +34,7 @@
       void s;
 
       root.append(
-        h("header", { class: "page-head" }, h("div", {}, h("h1", {}, "选题灵感"), h("p", { class: "sub" }, "批量出选题，挑好的收藏或直接写成稿"))),
+        h("header", { class: "page-head" }, h("div", {}, h("h1", {}, "选题"), h("p", { class: "sub" }, "批量出选题，挑好的收藏或直接写成稿"))),
         h("div", { class: "writer-grid" },
           card({ title: "找选题", icon: "search" },
             h("div", { class: "form" },

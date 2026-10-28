@@ -8,6 +8,13 @@
   const api = window.app;
   const { h } = window.Shell;
 
+  // replaceChildren(a, cond ? b : null) 会把 null 当成文字「null」显示出来：统一跳过 null / undefined / false
+  if (!Element.prototype.__caiSafeReplace) {
+    const raw = Element.prototype.replaceChildren;
+    Element.prototype.replaceChildren = function (...nodes) { return raw.apply(this, nodes.filter((n) => n !== null && n !== undefined && n !== false)); };
+    Element.prototype.__caiSafeReplace = true;
+  }
+
   async function call(p) {
     const r = await p;
     if (r && typeof r === "object" && !Array.isArray(r) && r.ok === false && r.error) throw new Error(r.error);
@@ -154,14 +161,69 @@
     if (!r) return null;
     return h("span", { class: `push-tag push-${r.status}`, title: r.error || fmtDate(r.at) }, PUSH_NAMES[r.status] || r.status);
   }
-  // 推送一篇已保存的内容（后台任务，同平台自动排队）；返回 result 或抛错
-  async function push(contentId, { title } = {}) {
-    return runAi("publish:push", { contentId }, { title });
+  // 推送一篇已保存的内容（后台任务，同平台自动排队）；platformAccountId 指定用哪个平台号；返回 result 或抛错
+  async function push(contentId, { title, platformAccountId = "", force = false } = {}) {
+    return runAi("publish:push", { contentId, platformAccountId, force }, { title });
   }
   api.publish.onChanged(() => changed("contents"));
 
+  // ---- 平台号（同一平台可以登录多个号） ----
+  let platformAccounts = [];
+  async function loadPlatformAccounts() { platformAccounts = await call(api.publish.accounts()); return platformAccounts; }
+  const loggedInOf = (pf) => platformAccounts.filter((a) => a.platform === pf && a.loggedIn);
+  // 推送用哪个号的下拉框：只有一个号时也显示（方便看用的是谁）；没有号时显示提示。value = "" 表示「默认（绑定当前运营账号的号）」
+  function accountPicker(pf, value = "", { onChange } = {}) {
+    const sel = h("select", { class: "input input-sm pa-picker", title: "用哪个平台号推送" });
+    const draw = (pfNow, v) => {
+      const list = loggedInOf(pfNow);
+      const cur = currentAccountId();
+      const bound = list.find((a) => a.boundAccountId === cur);
+      const def = bound ? `默认：${bound.name}` : list.length === 1 ? `默认：${list[0].name}` : list.length ? "请选择平台号" : `还没登录${platformName(pfNow)}`;
+      sel.replaceChildren(h("option", { value: "" }, def), ...list.map((a) => h("option", { value: a.id }, a.name + (a.boundAccountId && a.boundAccountId !== cur ? "（绑定其他运营账号）" : ""))));
+      sel.value = list.some((a) => a.id === v) ? v : "";
+      sel.disabled = !list.length;
+      sel.hidden = pfNow === "douyin" && list.length <= 1;
+    };
+    draw(pf, value);
+    sel.addEventListener("change", () => onChange && onChange(sel.value));
+    sel.redraw = (pfNow, v = sel.value) => draw(pfNow, v);
+    return sel;
+  }
+  api.publish.onAccounts(() => loadPlatformAccounts().then(() => changed("platformAccounts")).catch(() => {}));
+  // 主进程改了数据（自动创作 / 拆解入库）
+  api.onData((p) => { if (p && p.what) changed(p.what); });
+  api.auto.onChanged(() => changed("auto"));
+  window.Shell.onStart(() => { loadPlatformAccounts().then(() => changed("platformAccounts")).catch(window.Shell.reportError); });
+
+  // 重合度标签
+  function overlapTag(c, limit) {
+    if (!c || c.overlap == null || c.overlap < 0) return null;
+    const bad = c.needsRewrite || (limit != null && c.overlap > limit);
+    return h("span", { class: "ov-tag" + (bad ? " bad" : ""), title: "与参考原文的重合度" }, `重合 ${c.overlap}%`);
+  }
+  const rewriteTag = (c) => (c && c.needsRewrite ? h("span", { class: "push-tag push-failed", title: "与参考原文重合度过高，改写后再推送" }, "需改写") : null);
+  const SOURCE_NAMES = { wechat: "公众号", toutiao: "头条", baijiahao: "百家号", xiaohongshu: "小红书", douyin: "抖音", other: "其他" };
+  const fmtCount = (n) => (!n ? "" : n >= 1e8 ? (n / 1e8).toFixed(1).replace(/\.0$/, "") + "亿" : n >= 1e4 ? (n / 1e4).toFixed(1).replace(/\.0$/, "") + "万" : String(n));
+  const fmtAgo = (ts) => {
+    if (!ts) return "";
+    const d = Date.now() - ts;
+    if (d < 3600000) return `${Math.max(1, Math.floor(d / 60000))} 分钟前`;
+    if (d < 86400000) return `${Math.floor(d / 3600000)} 小时前`;
+    if (d < 7 * 86400000) return `${Math.floor(d / 86400000)} 天前`;
+    return ymd(new Date(ts));
+  };
+  // 分段标签：tabs([["find","找爆款"],…], onPick) → { el, set(id) }
+  function tabs(items, onPick, initial) {
+    const el = h("div", { class: "segmented tabs-bar", role: "tablist" });
+    const set = (id) => { for (const b of el.children) b.classList.toggle("active", b.dataset.tab === id); onPick(id); };
+    for (const [id, label] of items) el.append(h("button", { dataset: { tab: id }, role: "tab", onclick: () => set(id) }, label));
+    if (initial) setTimeout(() => set(initial), 0);
+    return { el, set };
+  }
+
   window.Content = {
     loadAccounts, currentAccount, currentAccountId, switchAccount, getAccounts: () => accounts.slice(), push, pushTag, PUSH_NAMES,
+    loadPlatformAccounts, getPlatformAccounts: () => platformAccounts.slice(), loggedInOf, accountPicker, overlapTag, rewriteTag, SOURCE_NAMES, fmtCount, fmtAgo, tabs,
     call, runAi, cancelTask, open, take, meta, field, selectEl, platformOptions, statusOptions, platformTag, statusTag,
     platformName, statusName, countWords, splitTitle, today, ymd, fmtDate, copy, err, onData, changed, save, remove, list,
     PLATFORM_NAMES, STATUS_NAMES,

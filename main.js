@@ -19,6 +19,8 @@ const { createTaskManager } = require("./lib/tasks");
 const { setupShellIpc } = require("./lib/shell-ipc");
 const { setupContentIpc, CONTENT_SCHEMA } = require("./lib/content-ipc");
 const { createPublisher } = require("./lib/publish/publisher");
+const { createDiscover } = require("./lib/discover/runner");
+const { createAutomation } = require("./lib/automation");
 
 const config = loadConfig(__dirname);
 const TIMEOUT_MS = 25000; // 所有页面加载 / 网络请求的超时上限
@@ -48,7 +50,7 @@ const DATA_DIR = process.env.APP_DATA_DIR || app.getPath("userData");
 // 自己的设置项加在这里，例如 { ...BASE_SCHEMA, exportDir: { type: "string", default: "" } }
 const settings = createSettings({ file: path.join(DATA_DIR, "settings.json"), schema: { ...BASE_SCHEMA, ...CONTENT_SCHEMA } });
 const logger = createLogger({ dir: path.join(DATA_DIR, "logs"), level: settings.get("logLevel"), echo: !app.isPackaged || SMOKE });
-const tasks = createTaskManager({ concurrency: 2, logger });
+const tasks = createTaskManager({ concurrency: 4, logger });
 const log = logger.scope("main");
 logger.prune();
 log.info(`启动 ${config.productName} ${LAYER_VERSION}（${BOOT.source === "update" ? "已更新的应用层" : "安装包内置"}，Electron ${process.versions.electron}，${process.platform}-${process.arch}）`);
@@ -197,8 +199,25 @@ setupShellIpc({ electron, settings, logger, tasks, dataDir: DATA_DIR, broadcast,
 let publisher = null;
 const content = setupContentIpc({ electron, settings, tasks, logger, dataDir: DATA_DIR, broadcast, fetchImpl: (url, opts) => net.fetch(url, opts),
   onAccountRemoved: (id) => { if (publisher) publisher.clearAccount(id).catch(() => {}); } });
-// 平台登录 / 打开草稿箱 / 自动存草稿
+// 平台号（多号登录）/ 打开草稿箱 / 自动存草稿
 publisher = createPublisher({ electron, logger, settings, tasks, store: content.store, broadcast, dataDir: DATA_DIR, iconPath: APP_ICON });
+// 找爆款（后台窗口搜索 / 读正文 / 今日热点）+ 对标拆解 + 定时自动创作
+const discover = createDiscover({ electron, logger, store: content.store, fetchImpl: timedFetch, iconPath: APP_ICON });
+const automation = createAutomation({ tasks, store: content.store, settings, logger, discover, content, publisher, broadcast });
+{
+  const dh = (ch, fn) => ipcMain.handle(ch, async (_e, ...args) => {
+    try { return await fn(...args); } catch (err) { logger.scope("discover").warn(`${ch} 失败：${err.message}`); return { ok: false, error: err.message }; }
+  });
+  dh("discover:meta", () => discover.meta());
+  dh("discover:hot", (force) => discover.hot({ force: !!force }));
+  dh("discover:webLogin", (pf) => discover.webLogin(String(pf)));
+  dh("discover:webStatus", async (pf) => ({ loggedIn: await discover.webLoggedIn(String(pf)) }));
+  dh("discover:overlap", (text, refId) => automation.overlapOf(String(text || ""), String(refId || "")));
+  dh("discover:duplicate", (item) => automation.findDuplicate(item && typeof item === "object" ? item : {}));
+  dh("auto:status", () => automation.status());
+  dh("auto:runNow", () => ({ ok: true, task: tasks.run("auto:run", { trigger: "manual" }, { title: "自动创作（立即运行一次）" }) }));
+  settings.onChange((changed) => { if (Object.keys(changed).some((k) => k.startsWith("auto"))) broadcast("auto:changed", {}); });
+}
 
 // ---------------- CI 冒烟测试 ----------------
 function runSmokeTest() {
@@ -229,10 +248,24 @@ function runSmokeTest() {
       const saved = await a.store.upsert("materials", { title: "冒烟测试素材", content: "x" });
       const storeOk = !!(saved && saved.ok && saved.item.id) && (await a.store.remove("materials", saved.item.id)) === true;
       const aiMeta = await a.ai.meta();
-      // 运营账号自动建好；平台列表和登录状态能读
+      // 运营账号自动建好；平台列表和平台号列表能读；旧的按运营账号登录的接口已删除
       const accounts = await a.store.list("accounts");
       const pubMeta = await a.publish.meta();
-      const pubStatus = await a.publish.status(accounts[0] && accounts[0].id);
+      const pubAccounts = await a.publish.accounts();
+      const oldApi = typeof a.publish.status === "function" || typeof a.publish.login === "function" || typeof a.publish.logout === "function";
+      // 0.4.1：找爆款来源、拆解库、自动创作状态、重合度、今日热点接口
+      const discoverMeta = await a.discover.meta();
+      const bdList = await a.store.list("breakdowns");
+      const autoSt = await a.auto.status();
+      const ov = await a.discover.overlap("测试文本", "");
+      const pages = {};
+      for (const id of ["benchmark", "writer", "publish", "home"]) {
+        window.Shell.navigate(id);
+        for (let i = 0; i < 40 && !document.querySelector("#page-" + id + " .page-head"); i++) await new Promise((r) => setTimeout(r, 50));
+        pages[id] = !!document.querySelector("#page-" + id + " .page-head");
+      }
+      const tabs = ["find", "paste", "library"].every((t) => !!document.querySelector("#page-benchmark [data-tab='" + t + "']"));
+      const flow = document.querySelectorAll("#page-home .flow-step").length;
       const groups = !!document.getElementById("settings-group-custom") && !!document.getElementById("settings-group-system") && !!document.getElementById("settings-accounts");
       // 右侧运行日志面板能打开，外观设置能生效
       window.Shell.toggleLogDock(true);
@@ -251,16 +284,21 @@ function runSmokeTest() {
         theme: document.documentElement.dataset.theme || "",
         task: task && task.status,
         logCount: logs.length, dock, look, storeOk, providers: aiMeta.providers.length,
-        accounts: accounts.length, publish: Array.isArray(pubMeta) ? pubMeta.length : 0, publishStatus: !!(pubStatus && pubStatus.wechat), groups,
+        accounts: accounts.length, publish: Array.isArray(pubMeta) ? pubMeta.length : 0, pubAccounts: Array.isArray(pubAccounts), oldApi, groups,
+        sources: Array.isArray(discoverMeta) ? discoverMeta.length : 0, breakdowns: Array.isArray(bdList), auto: !!(autoSt && "next" in autoSt), overlap: ov && ov.overlap === -1,
+        pages, tabs, flow, autoSettings: !!document.getElementById("settings-auto"), pfSettings: !!document.getElementById("settings-platform-login"),
         switcher: !!document.querySelector("#sidebar .acct-switch select"),
         info, source: upd.source,
       };
     })()`, true), TIMEOUT_MS, "页面脚本");
     const result = { ...out, layerVersion: LAYER_VERSION, boot: { source: BOOT.source, version: BOOT.version, bundled: BOOT.bundledVersion, electron: BOOT.electron }, platform: process.platform, rendererErrors: errors };
     const ok = out.api && out.nodeHidden && out.card && out.name === config.productName && out.version.includes(LAYER_VERSION)
-      && ["home", "topics", "writer", "library", "rewrite", "materials", "calendar", "tasks", "logs", "settings"].every((p) => out.navs.includes(p)) && out.settingsVisible
+      && ["home", "topics", "benchmark", "writer", "publish", "materials", "tasks", "logs", "settings"].every((p) => out.navs.includes(p))
+      && !["library", "rewrite", "calendar"].some((p) => out.navs.includes(p)) && out.settingsVisible
       && /^(light|dark)$/.test(out.theme) && out.task === "done" && out.logCount > 0 && out.dock && out.look && out.storeOk && out.providers > 0
-      && out.accounts >= 1 && out.publish === 5 && out.publishStatus && out.groups && out.switcher && !errors.length;
+      && out.accounts >= 1 && out.publish === 5 && out.pubAccounts && !out.oldApi && out.groups && out.switcher
+      && out.sources === 5 && out.breakdowns && out.auto && out.overlap && Object.values(out.pages).every(Boolean) && out.tabs && out.flow === 4
+      && out.autoSettings && out.pfSettings && !errors.length;
     console.log((ok ? "SMOKE OK " : "SMOKE FAIL ") + JSON.stringify(result));
     clearTimeout(hardStop);
     BOOT.markGood();
@@ -275,7 +313,10 @@ if (gotLock) {
   app.whenReady().then(() => {
     if (process.platform === "darwin" && app.dock) { try { app.dock.setIcon(APP_ICON); } catch {} }
     createWindow();
+    // 0.4.0 按「运营账号 × 平台」登录的号 → 平台号（只做一次）
+    publisher.migrate().then((n) => { if (n) broadcast("publish:accounts", { migrated: n }); }).catch((err) => log.warn("迁移平台号失败：" + err.message));
     if (SMOKE) { runSmokeTest(); return; }
+    automation.scheduler.start();
     if (!NO_UPDATES && settings.get("autoCheckUpdate")) setTimeout(() => { checkUpdate({ auto: true }).catch(() => {}); }, 6000);
     app.on("activate", () => { if (!mainWindow || mainWindow.isDestroyed()) createWindow(); });
   });

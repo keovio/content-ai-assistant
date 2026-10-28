@@ -64,7 +64,7 @@ contextBridge.exposeInMainWorld("app", {
     test: () => ipcRenderer.invoke("ai:test"),
     onDelta: on("ai:delta"),
   },
-  // 本地数据：集合 contents（内容）/ materials（素材）/ topics（收藏的选题）
+  // 本地数据：集合 contents（内容）/ materials（素材）/ topics（收藏的选题）/ breakdowns（拆解库）/ platformAccounts、autoRuns（只读）
   store: {
     list: (name, filter) => ipcRenderer.invoke("store:list", name, filter),
     get: (name, id) => ipcRenderer.invoke("store:get", name, id),
@@ -72,18 +72,40 @@ contextBridge.exposeInMainWorld("app", {
     remove: (name, id) => ipcRenderer.invoke("store:remove", name, id),
     stats: (today) => ipcRenderer.invoke("store:stats", today),
   },
-  // 平台：登录状态 / 登录 / 退出 / 打开后台或草稿箱；推送走后台任务 tasks.run("publish:push", { contentId })
+  // 平台号（同一平台可以登录多个号）：accounts(platform?) 列表带登录状态 / add(platform) 弹出登录页添加 /
+  // relogin(id) / update(id, { name, boundAccountId }) / remove(id) 退出并移除 / open(id, "drafts"|"home"|"editor")；
+  // 推送走后台任务 tasks.run("publish:push", { contentId, platformAccountId? })
   publish: {
     meta: () => ipcRenderer.invoke("publish:meta"),
-    status: (accountId) => ipcRenderer.invoke("publish:status", accountId),
-    login: (accountId, platform) => ipcRenderer.invoke("publish:login", accountId, platform),
-    logout: (accountId, platform) => ipcRenderer.invoke("publish:logout", accountId, platform),
-    open: (accountId, platform, which) => ipcRenderer.invoke("publish:open", accountId, platform, which),
+    accounts: (platform) => ipcRenderer.invoke("publish:accounts", platform),
+    add: (platform) => ipcRenderer.invoke("publish:add", platform),
+    relogin: (id) => ipcRenderer.invoke("publish:relogin", id),
+    update: (id, patch) => ipcRenderer.invoke("publish:update", id, patch),
+    remove: (id) => ipcRenderer.invoke("publish:remove", id),
+    open: (id, which) => ipcRenderer.invoke("publish:open", id, which),
+    defaultFor: (platform, accountId) => ipcRenderer.invoke("publish:defaultFor", platform, accountId),
     openFor: (contentId) => ipcRenderer.invoke("publish:openFor", contentId),
     openShots: () => ipcRenderer.invoke("publish:shots"),
-    onStatus: on("publish:status"),
+    onAccounts: on("publish:accounts"),
     onChanged: on("publish:changed"),
   },
+  // 找爆款 / 对标拆解：搜索、拆解、批量创作走后台任务 discover:search / discover:breakdown / discover:batch
+  discover: {
+    meta: () => ipcRenderer.invoke("discover:meta"),
+    hot: (force) => ipcRenderer.invoke("discover:hot", force),
+    webLogin: (platform) => ipcRenderer.invoke("discover:webLogin", platform),
+    webStatus: (platform) => ipcRenderer.invoke("discover:webStatus", platform),
+    overlap: (text, refId) => ipcRenderer.invoke("discover:overlap", text, refId),
+    duplicate: (item) => ipcRenderer.invoke("discover:duplicate", item),
+  },
+  // 定时自动创作：status() 开关 / 下次运行时间 / 最近运行；runNow() 立即运行一次
+  auto: {
+    status: () => ipcRenderer.invoke("auto:status"),
+    runNow: () => ipcRenderer.invoke("auto:runNow"),
+    onChanged: on("auto:changed"),
+  },
+  // 主进程改了数据（自动创作写稿、拆解入库）：onData(({ what }) => …)
+  onData: on("data:changed"),
   content: {
     exportFile: (id) => ipcRenderer.invoke("content:export", id),
     copy: (text) => ipcRenderer.invoke("clipboard:write", text),
