@@ -65,6 +65,7 @@ contextBridge.exposeInMainWorld("app", {
     onDelta: on("ai:delta"),
   },
   // 写法库（从拆解库汇总）：list(选题) → { list, auto: 按选题自动挑中的 id }
+  preview: { html: (body) => ipcRenderer.invoke("preview:html", body) },
   techniques: { list: (topic) => ipcRenderer.invoke("techniques:list", topic) },
   // 配图：独立的生图设置（服务商 / Key / 测试），缩略图只能读应用自己的 images 目录
   images: {
@@ -74,6 +75,7 @@ contextBridge.exposeInMainWorld("app", {
     useProvider: (id) => ipcRenderer.invoke("images:useProvider", id),
     test: () => ipcRenderer.invoke("images:test"),
     dataUrl: (name) => ipcRenderer.invoke("images:dataUrl", name),
+    import: (p) => ipcRenderer.invoke("images:import", p),
   },
   // 本地数据：集合 contents（内容）/ materials（素材）/ topics（收藏的选题）/ breakdowns（拆解库）/ platformAccounts、autoRuns（只读）
   store: {

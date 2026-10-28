@@ -221,7 +221,89 @@
     return { el, set };
   }
 
+  // ---------- 手机预览 ----------
+  // phonePreview({ title, body, platform, cover, accountName })：手机尺寸按平台样式看文章，可切换平台
+  async function phonePreview({ title = "", body = "", platform = "wechat", cover = "", accountName = "" } = {}) {
+    let html = "", coverSrc = "";
+    try {
+      html = await call(api.preview.html(body));
+      if (cover) coverSrc = await call(api.images.dataUrl(cover)).catch(() => "");
+    } catch (e) { err(e); return; }
+    const name = accountName || (currentAccount() && currentAccount().name) || "我的账号";
+    const screen = h("div", { class: "phone-screen" });
+    const words = countWords(body.replace(/^\s*!\[[^\]]*\]\(cai-img:[^)]*\)\s*$/gm, ""));
+    const date = new Date();
+    const dateText = `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
+    const content = () => { const d = h("div", { class: "pv-body" }); d.innerHTML = html; return d; };
+    const firstImg = () => coverSrc || (html.match(/<img src="([^"]+)"/) || [])[1] || "";
+    function draw(pf) {
+      screen.className = "phone-screen pv-" + pf;
+      const t = title || "未命名";
+      let nodes;
+      if (pf === "xiaohongshu" || pf === "douyin") {
+        const pic = firstImg();
+        nodes = [
+          h("div", { class: "pv-bar" }, h("span", { class: "pv-avatar" }, name.slice(0, 1)), h("b", {}, name), h("span", { class: "pv-follow" }, "关注")),
+          pic ? h("img", { class: "pv-hero", src: pic, alt: "" }) : h("div", { class: "pv-hero pv-hero-text" }, t),
+          h("div", { class: "pv-pad" }, h("h2", { class: "pv-title" }, t), content(), h("p", { class: "pv-meta" }, `${dateText} · ${words} 字`)),
+        ];
+      } else {
+        const meta = pf === "wechat" ? [h("span", {}, "原创"), h("span", { class: "pv-acc" }, name), h("span", {}, dateText)]
+          : [h("span", { class: "pv-avatar sm" }, name.slice(0, 1)), h("span", { class: "pv-acc" }, name), h("span", {}, `${dateText} · ${words} 字`)];
+        nodes = [h("div", { class: "pv-pad" },
+          h("h1", { class: "pv-title" }, t),
+          h("div", { class: "pv-meta" }, ...meta),
+          coverSrc && pf !== "wechat" ? h("img", { class: "pv-cover", src: coverSrc, alt: "" }) : "",
+          content(),
+          h("p", { class: "pv-end" }, pf === "wechat" ? "阅读 · 赞 · 在看" : "— 完 —"))];
+      }
+      screen.replaceChildren(...nodes);
+      screen.scrollTop = 0;
+    }
+    const tabsEl = h("div", { class: "segmented pv-tabs" });
+    for (const [id, label] of Object.entries(PLATFORM_NAMES)) tabsEl.append(h("button", { class: id === platform ? "active" : "", onclick: (e) => { for (const b of tabsEl.children) b.classList.toggle("active", b === e.currentTarget); draw(id); } }, label));
+    const close = () => { overlay.remove(); document.removeEventListener("keydown", onKey); };
+    const onKey = (e) => { if (e.key === "Escape") close(); };
+    const overlay = h("div", { class: "modal-overlay pv-overlay", onclick: (e) => { if (e.target === overlay) close(); } },
+      h("div", { class: "pv-wrap" },
+        h("div", { class: "pv-head" }, tabsEl, h("button", { class: "btn small", onclick: close }, "关闭")),
+        h("div", { class: "phone" }, h("div", { class: "phone-notch" }), screen),
+        h("p", { class: "muted small-text pv-tip" }, "按手机屏幕宽度（375）大致模拟各平台的排版，实际以平台显示为准")));
+    draw(PLATFORM_NAMES[platform] ? platform : "wechat");
+    document.body.append(overlay);
+    document.addEventListener("keydown", onKey);
+  }
+
+  // 从图片素材里挑一张：resolve 选中的素材或 null
+  function pickImage() {
+    return new Promise(async (resolve) => {
+      let list = [];
+      try { list = (await call(api.store.list("materials"))).filter((m) => m.kind === "image" && m.image); } catch (e) { err(e); resolve(null); return; }
+      const close = (v) => { overlay.remove(); resolve(v); };
+      const q = h("input", { class: "input grow", type: "search", placeholder: "按说明 / 标签搜索" });
+      const grid = h("div", { class: "pick-grid" });
+      const draw = () => {
+        const k = q.value.trim().toLowerCase();
+        const rows = list.filter((m) => !k || `${m.title} ${(m.tags || []).join(" ")} ${m.content}`.toLowerCase().includes(k));
+        grid.replaceChildren(...(rows.length ? rows.slice(0, 60).map((m) => {
+          const img = h("img", { alt: m.title || "" });
+          call(api.images.dataUrl(m.image)).then((u) => { if (u) img.src = u; }).catch(() => {});
+          return h("button", { class: "pick-item", title: m.content || m.title, onclick: () => close(m) }, img, h("span", {}, m.title || "图片"));
+        }) : [h("p", { class: "muted" }, list.length ? "没有搜到" : "还没有图片素材：AI 配图生成的图会自动收进来，也可以在素材库上传")]));
+      };
+      q.addEventListener("input", draw);
+      const overlay = h("div", { class: "modal-overlay", onclick: (e) => { if (e.target === overlay) close(null); } },
+        h("div", { class: "modal pick-modal" },
+          h("div", { class: "toolbar" }, h("b", {}, "选一张素材图"), q, h("button", { class: "btn small", onclick: () => close(null) }, "取消")),
+          grid));
+      draw();
+      document.body.append(overlay);
+      q.focus();
+    });
+  }
+
   window.Content = {
+    phonePreview, pickImage,
     loadAccounts, currentAccount, currentAccountId, switchAccount, getAccounts: () => accounts.slice(), push, pushTag, PUSH_NAMES,
     loadPlatformAccounts, getPlatformAccounts: () => platformAccounts.slice(), loggedInOf, accountPicker, overlapTag, rewriteTag, SOURCE_NAMES, fmtCount, fmtAgo, tabs,
     call, runAi, cancelTask, open, take, meta, field, selectEl, platformOptions, statusOptions, platformTag, statusTag,

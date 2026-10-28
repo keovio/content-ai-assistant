@@ -106,7 +106,7 @@
               h("div", { class: "form-row" }, C.field("平台", pfSel), C.field("篇幅", wordsSel)),
               C.field("风格要求", styleIn),
               C.field("大纲 / 要点", outlineIn),
-              C.field("参考素材", matBox, "勾选的素材会交给 AI 参考"),
+              C.field("参考素材", matBox, "勾选的素材交给 AI 参考；不勾就按选题自动挑相关的（设置里可关）"),
               C.field("运用写法", techBox, "从拆解库汇总的写法，写稿时让 AI 自然用上"),
               h("div", { class: "actions" }, genBtn, stopBtn, genStatus))),
             // 平台版本放在写作设定下面
@@ -115,7 +115,9 @@
             ovBox, titleIn, titleBox, bodyIn, imgStrip,
             h("div", { class: "editor-bar" },
               wc, h("span", { class: "spacer" }),
+              h("button", { class: "btn small", title: "按手机尺寸和平台样式预览", onclick: () => C.phonePreview({ title: titleIn.value.trim(), body: bodyIn.value, platform: pfSel.value, cover: current.cover || "" }) }, "手机预览"),
               h("button", { class: "btn small", onclick: suggestTitles }, "AI 取标题"), imgBtn,
+              h("button", { class: "btn small", title: "从素材库挑图片插到光标处", onclick: () => C.pickImage().then((m) => { if (!m) return; const a = bodyIn.selectionStart ?? bodyIn.value.length; const line = `\n\n![${(m.title || "配图").slice(0, 40)}](cai-img:${m.image})\n\n`; bodyIn.value = (bodyIn.value.slice(0, a).replace(/\s+$/, "") + line + bodyIn.value.slice(a).replace(/^\s+/, "")).replace(/^\s+/, ""); bodyIn.dispatchEvent(new Event("input")); }) }, "素材图"),
               undoBtn, polishSel, h("button", { class: "btn small", title: "选中一段只处理选中的，不选就处理全文", onclick: polish }, "处理")),
             h("div", { class: "editor-bar push-bar" }, pushInfo, h("span", { class: "spacer" }), paSel, draftsBtn, pushBtn),
             h("div", { class: "editor-bar" },
@@ -127,7 +129,7 @@
 
       async function loadMaterials(selected = []) {
         try {
-          const list = await C.list("materials");
+          const list = (await C.list("materials")).filter((m) => m.kind !== "image");
           const keep = new Set(selected.concat([...matBox.querySelectorAll("input:checked")].map((i) => i.value)));
           matBox.replaceChildren(...(list.length ? list.slice(0, 50).map((m) =>
             h("label", { class: "check mat-item", title: (m.content || "").slice(0, 200) },
@@ -478,6 +480,7 @@
           h("div", { class: "editor-bar" }, C.platformTag(v.platform), C.overlapTag(v), C.rewriteTag(v), C.pushTag(v), h("span", { class: "spacer" }), info),
           t, b,
           h("div", { class: "editor-bar" }, C.field("状态", st), h("span", { class: "spacer" }),
+            h("button", { class: "btn small", onclick: () => C.phonePreview({ title: t.value.trim(), body: b.value, platform: v.platform, cover: v.cover || "" }) }, "手机预览"),
             h("button", { class: "btn small", onclick: () => C.copy((t.value ? t.value + "\n\n" : "") + b.value, C.platformName(v.platform) + "版本") }, "复制"),
             h("button", { class: "btn small ghost", onclick: async () => { if (await confirmLeave()) load({ id: v.id }); } }, "在编辑器打开"),
             h("button", { class: "btn small danger-ghost", onclick: async () => {

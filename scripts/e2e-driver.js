@@ -125,6 +125,28 @@ async function run(win) {
     await sleep(1500);
     await js(`document.getElementById("writer-versions").scrollIntoView(); return true;`);
     await shot("创作-平台版本");
+    // ---- 6b. 0.5.0 手机预览 ----
+    await js(`document.querySelector("#page-writer .main-col, #page-writer").scrollIntoView(); [...document.querySelectorAll("#page-writer button")].find((b) => b.textContent === "手机预览").click(); return true;`);
+    await waitFor(`return document.querySelector(".pv-overlay .pv-body") ? true : null;`, 10000, "手机预览");
+    await sleep(600);
+    await shot("手机预览-公众号");
+    R.preview = await js(`return { title: document.querySelector(".pv-overlay .pv-title").textContent, imgs: document.querySelectorAll(".pv-overlay .pv-body img").length, tabs: document.querySelectorAll(".pv-overlay .pv-tabs button").length };`);
+    await js(`[...document.querySelectorAll(".pv-overlay .pv-tabs button")].find((b) => b.textContent === "小红书").click(); return true;`);
+    await sleep(500);
+    await shot("手机预览-小红书");
+    await js(`[...document.querySelectorAll(".pv-overlay button")].find((b) => b.textContent === "关闭").click(); return true;`);
+    // 平台版本也能预览
+    const vBtn = await js(`const b = [...document.querySelectorAll("#writer-versions button")].find((x) => x.textContent === "手机预览"); if (b) { b.click(); return true; } return false;`);
+    if (vBtn) { await waitFor(`return document.querySelector(".pv-overlay .pv-body") ? true : null;`, 10000, "版本手机预览"); await sleep(500); await shot("手机预览-平台版本"); await js(`document.querySelector(".pv-overlay").click(); return true;`); }
+    R.previewVersion = vBtn;
+    // ---- 6c. 0.5.0 素材复用：再配一次图，应优先复用素材库里的图 ----
+    R.reuse = await js(`const src = (await window.app.store.list("contents")).find((c) => c.id === ${JSON.stringify(goodId)}); const c = await window.app.store.upsert("contents", { title: src.title + "（复用测试）", body: src.body.replace(/^!\\[.*\\]\\(cai-img:.*\\)$/gm, ""), platform: src.platform, status: "draft" }); const r = await window.Content.runAi("ai:images", { contentId: c.item.id }); return { count: r.count, reused: r.reused };`);
+    const TINY = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+    R.upload = await js(`const r = await window.app.images.import({ data: ${JSON.stringify(TINY)}, fileName: "街角咖啡店.png", tags: "咖啡 门店" }); return { kind: r.kind, title: r.title, image: !!r.image };`);
+    await nav("materials");
+    await sleep(1200);
+    await shot("素材库-图片");
+    R.materials = await js(`const l = await window.app.store.list("materials"); return { images: l.filter((m) => m.kind === "image").length, total: l.length };`);
   }
 
   // ---- 7. 拆解库 ----

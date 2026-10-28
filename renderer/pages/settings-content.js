@@ -104,6 +104,8 @@
         row("每篇几张（可不填）", "文中配图张数；自动 = AI 按文章长度和内容判断（一般每 400–600 字一张）", select("imageCount", [[-1, "自动"], [0, "0 张（只要封面）"], [1, "1 张"], [2, "2 张"], [3, "3 张"], [4, "4 张"], [5, "5 张"], [6, "6 张"]], { parse: Number })),
         row("封面图", "额外生成一张封面（横图）", toggle("imageCover")),
         row("尺寸（可不填）", "自动 = 小红书 / 抖音竖图，其他平台横图", select("imageShape", [["auto", "自动"], ["landscape", "横图"], ["square", "方图"], ["portrait", "竖图"]])),
+        row("优先复用素材图", "配图前先从素材库的图片里找说明相符的直接用，找不到再生成，省钱也省时间", toggle("imageReuse")),
+        row("生成的图收进素材库", "AI 生成的封面和配图自动存成图片素材，以后可以复用或手动插入", toggle("imageCollect")),
         row("画风（可不填）", "不填就由 AI 按文章调性决定，全篇统一", textInput("imageStyle", { placeholder: "例如：扁平插画，干净明亮；或：胶片摄影感，暖色调" }), { stack: true }),
         row("测试生图", testOut, h("div", { class: "actions" }, h("button", { class: "btn", onclick: async (e) => {
           const b = e.currentTarget; b.disabled = true; testOut.textContent = "正在生成一张测试图…（可能要几十秒）"; testImg.hidden = true;
@@ -344,7 +346,9 @@
       box.append(h("p", { class: "card-desc" }, "内置了每个平台的写法规范；这里可以补充你自己的要求（例如固定结尾、字数、必带话题），写稿和生成平台版本时会优先遵守。"),
         row("默认平台", "写稿页默认选中的平台", select("defaultPlatform", Object.entries(C.PLATFORM_NAMES))),
         row("运用拆解出的写法", "写稿时从拆解库里按选题自动挑几条可复用写法 / 开头 / 标题公式让 AI 用上（创作页里也能手动勾选）；定时和批量创作同样适用", toggle("useTechniques")),
-        row("每篇挑几条", "", select("techniqueCount", [[2, "2 条"], [3, "3 条"], [4, "4 条"], [5, "5 条"], [6, "6 条"]], { parse: Number })));
+        row("每篇挑几条", "", select("techniqueCount", [[2, "2 条"], [3, "3 条"], [4, "4 条"], [5, "5 条"], [6, "6 条"]], { parse: Number })),
+        row("自动引用素材库", "写稿没勾素材时，按选题从素材库挑相关的数据 / 案例 / 金句交给 AI，让文章更有自己的料；定时和批量创作同样适用", toggle("useMaterials")),
+        row("每篇最多引用", "", select("materialCount", [[1, "1 条"], [2, "2 条"], [3, "3 条"], [5, "5 条"], [8, "8 条"]], { parse: Number })));
       C.meta().then((m) => {
         for (const p of m.platforms) {
           box.append(row(p.name, h("details", { class: "rule-details" }, h("summary", {}, "查看内置规范"), h("div", { class: "muted small-text" }, ...(p.guide || []).map((g) => h("p", {}, g)))),
