@@ -1,6 +1,6 @@
 {
   "name": "content-ai-assistant",
-  "version": "0.7.4",
+  "version": "0.7.5",
   "description": "内容AI运营助手：选题灵感、AI 写稿、一稿多发、素材库、内容日历（基于 electron-app-template）",
   "main": "boot/bootstrap.js",
   "private": true,
@@ -17,7 +17,7 @@
   },
   "devDependencies": {
     "@electron/asar": "3.4.1",
-    "electron": "^33.2.1",
+    "electron": "^44.10.0",
     "electron-builder": "^26.0.12"
   }
 }
